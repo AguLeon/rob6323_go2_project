@@ -26,9 +26,12 @@ class Rob6323Go2EnvCfg(DirectRLEnvCfg):
     # - spaces definition
     action_scale = 0.25
     action_space = 12
-    observation_space = 48
+    observation_space = 48 + 4
     state_space = 0
     debug_vis = True
+    raibert_heuristic_reward_scale = -10.0
+    feet_clearance_reward_scale = -30.0
+    tracking_contacts_shaped_force_reward_scale = 4.0
 
     # PD control gains
     Kp = 20.0  # Proportional gain
