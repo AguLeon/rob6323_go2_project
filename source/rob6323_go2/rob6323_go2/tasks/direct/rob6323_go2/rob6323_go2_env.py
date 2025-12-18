@@ -57,7 +57,8 @@ class Rob6323Go2Env(DirectRLEnv):
                 "dof_vel",
                 "ang_vel_xy",
                 "feet_clearance",
-                "tracking_contacts_shaped_force"
+                "tracking_contacts_shaped_force",
+                "base_collision_penalty"
             ]
         }
 
@@ -208,6 +209,11 @@ class Rob6323Go2Env(DirectRLEnv):
             )
         rew_tracking_contacts_shaped_force = rew_tracking_contacts_shaped_force / 4
 
+        # Base collision penalty - penalize excessive contact forces on base before termination
+        net_contact_forces = self._contact_sensor.data.net_forces_w_history
+        base_contact_force_magnitude = torch.max(torch.norm(net_contact_forces[:, :, self._base_id], dim=-1), dim=1)[0]
+        rew_base_collision = torch.clamp(base_contact_force_magnitude - 0.5, min=0.0)
+
         rewards = {
             "track_lin_vel_xy_exp": lin_vel_error_mapped * self.cfg.lin_vel_reward_scale * self.step_dt,
             "track_ang_vel_z_exp": yaw_rate_error_mapped * self.cfg.yaw_rate_reward_scale * self.step_dt,
@@ -219,6 +225,7 @@ class Rob6323Go2Env(DirectRLEnv):
             "ang_vel_xy": rew_ang_vel_xy * self.cfg.ang_vel_xy_reward_scale,
             "feet_clearance": rew_feet_clearance * self.cfg.feet_clearance_reward_scale,
             "tracking_contacts_shaped_force": rew_tracking_contacts_shaped_force * self.cfg.tracking_contacts_shaped_force_reward_scale,
+            "base_collision_penalty": rew_base_collision * self.cfg.base_collision_penalty_scale,
         }
         reward = torch.sum(torch.stack(list(rewards.values())), dim=0)
         # Logging

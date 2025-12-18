@@ -106,3 +106,6 @@ class Rob6323Go2EnvCfg(DirectRLEnvCfg):
 
     # termination
     base_height_min = 0.05
+
+    # collision penalty
+    base_collision_penalty_scale = -1.0
