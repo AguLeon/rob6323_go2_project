@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import gymnasium as gym
 import math
+import numpy as np
 import torch
 from collections.abc import Sequence
 
