@@ -212,7 +212,7 @@ class Rob6323Go2Env(DirectRLEnv):
 
         # Base collision penalty - penalize excessive contact forces on base before termination
         net_contact_forces = self._contact_sensor.data.net_forces_w_history
-        base_contact_force_magnitude = torch.max(torch.norm(net_contact_forces[:, :, self._base_id], dim=-1), dim=1)[0]
+        base_contact_force_magnitude = torch.max(torch.norm(net_contact_forces[:, :, self._base_id], dim=-1), dim=1)[0].squeeze()
         rew_base_collision = torch.clamp(base_contact_force_magnitude - 0.5, min=0.0)
 
         rewards = {
