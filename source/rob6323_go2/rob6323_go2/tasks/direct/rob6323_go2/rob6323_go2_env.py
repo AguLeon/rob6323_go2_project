@@ -62,6 +62,17 @@ class Rob6323Go2Env(DirectRLEnv):
                 "base_collision_penalty"
             ]
         }
+        # Performance metrics (not rewards)
+        self._episode_metrics = {
+            key: torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+            for key in [
+                "lin_vel_error",
+                "ang_vel_error",
+                "base_orient_error",
+                "torque_squared",
+            ]
+        }
+        self._episode_steps = torch.zeros(self.num_envs, dtype=torch.int, device=self.device)
 
         # variables needed for action rate penalization
         # Shape: (num_envs, action_dim, history_length)
@@ -229,9 +240,18 @@ class Rob6323Go2Env(DirectRLEnv):
             "base_collision_penalty": rew_base_collision * self.cfg.base_collision_penalty_scale,
         }
         reward = torch.sum(torch.stack(list(rewards.values())), dim=0)
-        # Logging
+        # Logging rewards
         for key, value in rewards.items():
             self._episode_sums[key] += value
+
+        # Logging performance metrics
+        self._episode_metrics["lin_vel_error"] += torch.sqrt(lin_vel_error)
+        self._episode_metrics["ang_vel_error"] += torch.sqrt(yaw_rate_error)
+        self._episode_metrics["base_orient_error"] += torch.acos(torch.clamp(self.robot.data.projected_gravity_b[:, 2], -1.0, 1.0))
+        torque_squared = torch.sum(torch.square(self.robot.data.applied_torque), dim=1)
+        self._episode_metrics["torque_squared"] += torque_squared
+        self._episode_steps += 1
+
         return reward
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -277,6 +297,19 @@ class Rob6323Go2Env(DirectRLEnv):
             self._episode_sums[key][env_ids] = 0.0
         self.extras["log"] = dict()
         self.extras["log"].update(extras)
+
+        # Log performance metrics
+        extras = dict()
+        episode_steps = self._episode_steps[env_ids].float()
+        for key in self._episode_metrics.keys():
+            episodic_metric_avg = torch.mean(self._episode_metrics[key][env_ids] / episode_steps)
+            extras["Metrics/" + key] = episodic_metric_avg.item()
+            self._episode_metrics[key][env_ids] = 0.0
+        extras["Metrics/episode_length"] = torch.mean(episode_steps).item()
+        self._episode_steps[env_ids] = 0
+        self.extras["log"].update(extras)
+
+        # Log termination reasons
         extras = dict()
         extras["Episode_Termination/base_contact"] = torch.count_nonzero(self.reset_terminated[env_ids]).item()
         extras["Episode_Termination/time_out"] = torch.count_nonzero(self.reset_time_outs[env_ids]).item()

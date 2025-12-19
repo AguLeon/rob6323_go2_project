@@ -270,10 +270,10 @@ This file tracks all modifications made to the baseline repository for the Go2 q
 
 ---
 
-### Run_03: Rebalanced Rewards (Ready to Launch)
-**Date:** TBD
-**Status:** 📝 Prepared
-**Expected Duration:** ~30 minutes
+### Run_03: Rebalanced Rewards (Job ID: 134880)
+**Date:** 2025-12-18 19:06:03
+**Status:** ❌ Failed (Insufficient Rebalancing)
+**Duration:** 500 iterations
 
 **Objective:** Fix reward imbalance from Run_02 by reducing the 2 largest penalty scales
 
@@ -288,7 +288,48 @@ This file tracks all modifications made to the baseline repository for the Go2 q
 - All posture stability penalties (orient, lin_vel_z, dof_vel, ang_vel_xy)
 - Collision penalty, tracking rewards, PD controller, observation space
 
+**Results:**
+- **Mean Reward:** -62.34 (improved from Run_02: -252.64, but still negative)
+- **Velocity Tracking Performance:**
+  - Lin vel XY: 0.11 (vs Run_01: 0.98) → **89% degradation** (marginal improvement from Run_02's 90%)
+  - Ang vel Z: 0.14 (vs Run_01: 0.49) → **73% degradation** (improved from Run_02's 81%)
+
+**Analysis:**
+- **Primary Issue:** 10x penalty reduction wasn't enough
+  - Robot still learned conservative "do nothing" policy
+  - Penalties still discouraging locomotion despite reduction
+  - Tracking rewards (lin_vel: 1.0, yaw: 0.5) provide insufficient gradient
+- **Root Cause:** Need stronger **positive incentives** to move, not just smaller penalties
+  - Current positive potential: ~1.5 total
+  - Remaining penalties still significant (clearance: -30.0, contact: 0.4, etc.)
+- **Conclusion:** Reducing penalties alone is insufficient - must boost tracking rewards
+
+**Logs Location:** `.logs/Run_03/rsl_rl/go2_flat_direct/2025-12-18_19-06-03/`
+
+---
+
+### Run_04: Boosted Tracking Rewards (Job ID: TBD)
+**Date:** TBD
+**Status:** 🔄 Preparing
+**Expected Duration:** ~30 minutes
+
+**Objective:** Fix reward imbalance by boosting tracking rewards instead of further reducing penalties
+
+**Strategy:** Provide stronger positive gradient toward velocity tracking
+
+**Changes from Run_03:**
+- **File:** `rob6323_go2_env_cfg.py`
+  - Line 98: `lin_vel_reward_scale = 3.0` (was 1.0, 3x boost)
+  - Line 99: `yaw_rate_reward_scale = 1.5` (was 0.5, 3x boost)
+
+**Unchanged from Run_03:**
+- All penalty scales (Raibert: -1.0, contact_force: 0.4, clearance: -30.0, etc.)
+- All posture stability penalties
+- PD controller, observation space, termination criteria
+
 **Expected Impact:**
-- Reduce total penalties from ~12.5 to ~2.5 (targeting similar magnitude as tracking rewards ~1.5)
-- Robot should pursue velocity tracking while still experiencing gait and contact penalties
-- Minimal changes allow isolated assessment of these two dominant penalty terms
+- New positive reward potential: ~4.5 (was ~1.5)
+- Stronger gradient toward velocity tracking objectives
+- Penalties remain meaningful but don't dominate
+- Robot should pursue locomotion while experiencing smoothness penalties
+- Motion should be functional + smoother than Run_01 baseline
