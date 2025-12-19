@@ -557,215 +557,13 @@ self.extras["log"].update(extras)
 
 ---
 
-### Run_05: Reduced Contact Force Penalty (Job ID: 134990)
-**Date:** 2025-12-18
-**Status:** ❌ FAILED - FileNotFoundError during TensorBoard initialization
-**Duration:** Failed before training started
-**Objective:** Push mean reward positive by reducing contact force penalty bottleneck identified in Run_04
-
-**Strategy:** Reduce largest remaining penalty (tracking_contacts_shaped_force) by 2x
-
-**Configuration:**
-- **Seed:** 42
-
-**Changes from Run_04:**
-
-**File:** `rob6323_go2_env_cfg.py`
-```python
-# Line 34: Reduce contact force penalty
-tracking_contacts_shaped_force_reward_scale = 0.2  # was 0.4
-```
-
-**Unchanged from Run_04:**
-- All tracking rewards (lin_vel: 3.0, yaw: 1.5)
-- All other penalties (Raibert: -1.0, clearance: -30.0, action_rate: -0.1, etc.)
-- PD controller, observation space, termination criteria
-
-**Expected Impact:**
-- Contact force penalty reduced from -1.517 to ~-0.76
-- Net positive potential: ~4.5 tracking vs ~3.5 total penalties
-- Expected mean reward: +10 to +20 range (positive territory)
-- Maintains soft landing encouragement but less aggressively
-- Should preserve Run_04's crash-free performance while improving overall reward
-
-**Rationale:**
-- Run_04 confirmed feet_clearance (-0.201) doesn't need reduction
-- Contact force is isolated bottleneck at -1.517
-- All other penalties < 1.0
-- 2x reduction aligns contact penalty with other regularization terms
-- Conservative change maintains tutorial structure
-
-**Failure Analysis:**
-
-**Error:** `FileNotFoundError: [Errno 2] No such file or directory: b'/workspace/isaaclab/logs/rsl_rl/go2_flat_direct/2025-12-18_21-28-18/events.out.tfevents.1766111317.b-31-179.37.0'`
-
-**Root Cause:**
-- TensorBoard writer in OnPolicyRunner tries to create events file before log directory exists
-- Race condition: `OnPolicyRunner.__init__()` (line 189 of train.py) initializes TensorBoard before `dump_yaml()` (lines 203-204) creates directory structure
-- SLURM script correctly creates job-specific directory, but nested subdirectory `rsl_rl/go2_flat_direct/TIMESTAMP/` must be created by train.py
-- Likely intermittent filesystem sync issue on Greene cluster
-
-**Fix Applied:**
-
-**File:** `scripts/rsl_rl/train.py`
-```python
-# Added at line 188, before OnPolicyRunner initialization:
-# ensure log directory exists before creating runner
-os.makedirs(log_dir, exist_ok=True)
-```
-
-**Why this fixes it:**
-- Guarantees log directory exists before OnPolicyRunner tries to create TensorBoard writer
-- Eliminates race condition entirely
-- Minimal change (1 line)
-- Follows best practice: create resources just before use
-
-**Re-run Plan:** Same configuration, submit new job after fix is deployed
-
----
-
-### Run_06: Reduced Action Rate + Feet Clearance Penalties (Job ID: 134996)
-**Date:** 2025-12-18
-**Status:** 🔄 Running
-**Duration:** ~30 minutes
-**Objective:** Test combined penalty reduction on action smoothness and feet clearance
-
-**Strategy:** Reduce both action_rate and feet_clearance penalties by 2x
-
-**Configuration:**
-- **Seed:** 42
-
-**Changes from Run_04:**
-
-**File:** `rob6323_go2_env_cfg.py`
-```python
-# Line 33: Reduce feet clearance penalty
-feet_clearance_reward_scale = -15.0  # was -30.0
-
-# Line 100: Reduce action rate penalty
-action_rate_reward_scale = -0.05  # was -0.1
-```
-
-**Unchanged from Run_04:**
-- All tracking rewards (lin_vel: 3.0, yaw: 1.5)
-- Other gait penalties (Raibert: -1.0, contact_force: 0.4)
-- All posture penalties (orient, lin_vel_z, dof_vel, ang_vel_xy)
-- PD controller, observation space, termination criteria
-
-**Expected Impact:**
-- Action rate penalty reduced from -0.906 to ~-0.45
-- Feet clearance penalty reduced from -0.201 to ~-0.10
-- Total penalties: ~2.95/step (vs Run_04: ~3.6/step)
-- Net positive potential: ~4.5 tracking vs ~2.95 penalties
-- Expected mean reward: Better than Run_04, potentially positive
-- May allow more aggressive actions and natural foot lifting
-- Risk: Potential increase in action jerkiness or excessive foot height
-
-**Rationale:**
-- Tests combined reduction of #2 and #4 penalty contributors from Run_04
-- Action_rate (-0.906) + feet_clearance (-0.201) = -1.107 total reduction potential
-- Run_04 showed feet_clearance was small but still present
-- Combined test explores whether both constraints were over-tuned
-- More aggressive than Run_05 (single parameter) but maintains all tutorial components
-
-**Comparison to Run_05:**
-- Run_05: Reduces contact_force only (largest penalty: -1.517 → ~-0.76)
-- Run_06: Reduces action_rate + feet_clearance (combined: -1.107 → ~-0.55)
-- Run_05 targets single largest bottleneck
-- Run_06 targets two smaller bottlenecks simultaneously
-- Results will reveal whether single large penalty or multiple small penalties are more critical
-
----
-
-### Run_07 (Retry): Higher Base Height Termination (Job ID: 135015)
-**Date:** 2025-12-18
-**Status:** 🔄 Running
-**Duration:** ~30 minutes
-**Objective:** Test effect of stricter base height termination on posture quality
-
-**Note:** This is a retry of the failed Run_07 (Job ID: 135002) with the FileNotFoundError fix applied.
-
-**Strategy:** Same as Run_05 but with 4x higher base_height_min termination threshold
-
-**Configuration:**
-- **Seed:** 42
-
-**Changes from Run_05:**
-
-**File:** `rob6323_go2_env_cfg.py`
-```python
-# Line 109: Increase base height termination threshold
-base_height_min = 0.2  # was 0.05
-```
-
-**Unchanged from Run_05:**
-- All tracking rewards (lin_vel: 3.0, yaw: 1.5)
-- All penalties (contact_force: 0.2, action_rate: -0.1, clearance: -30.0, Raibert: -1.0, etc.)
-- PD controller, observation space
-
-**Expected Impact:**
-- Episodes terminate if base drops below 20cm (vs 5cm in Run_05)
-- Encourages robot to maintain upright posture
-- May increase early terminations during initial learning
-- Could improve base stability metrics (pitch, roll, height)
-- Risk: Harder exploration, longer training time
-
-**Rationale:**
-- Run_04 showed perfect base contact avoidance (0.00)
-- Original threshold (0.05m) may be too lenient
-- Stricter threshold forces robot to learn better posture
-- Tests whether termination criteria can act as implicit reward shaping
-- Compares to Run_05 to isolate effect of termination threshold alone
-
----
-
-### Run_07: Higher Base Height Termination (Job ID: 135002)
-**Date:** 2025-12-18
-**Status:** 🔄 Running
-**Duration:** ~30 minutes
-**Objective:** Test effect of stricter base height termination on posture quality
-
-**Strategy:** Same as Run_05 but with 4x higher base_height_min termination threshold
-
-**Configuration:**
-- **Seed:** 42
-
-**Changes from Run_05:**
-
-**File:** `rob6323_go2_env_cfg.py`
-```python
-# Line 109: Increase base height termination threshold
-base_height_min = 0.2  # was 0.05
-```
-
-**Unchanged from Run_05:**
-- All tracking rewards (lin_vel: 3.0, yaw: 1.5)
-- All penalties (contact_force: 0.2, action_rate: -0.1, clearance: -30.0, Raibert: -1.0, etc.)
-- PD controller, observation space
-
-**Expected Impact:**
-- Episodes terminate if base drops below 20cm (vs 5cm in Run_05)
-- Encourages robot to maintain upright posture
-- May increase early terminations during initial learning
-- Could improve base stability metrics (pitch, roll, height)
-- Risk: Harder exploration, longer training time
-
-**Rationale:**
-- Run_04 showed perfect base contact avoidance (0.00)
-- Original threshold (0.05m) may be too lenient
-- Stricter threshold forces robot to learn better posture
-- Tests whether termination criteria can act as implicit reward shaping
-- Compares to Run_05 to isolate effect of termination threshold alone
-
----
-
-### Run_05 (Retry): Reduced Contact Force Penalty (Job ID: 135007)
+### Run_05: Reduced Contact Force Penalty (Job ID: 135062)
 **Date:** 2025-12-18
 **Status:** 🔄 Running
 **Duration:** ~30 minutes
 **Objective:** Push mean reward positive by reducing contact force penalty bottleneck identified in Run_04
 
-**Note:** This is a retry of the failed Run_05 (Job ID: 134990) with the FileNotFoundError fix applied.
+**Legacy Job IDs:** 134990 (failed - FileNotFoundError), 135007 (failed - FileNotFoundError)
 
 **Strategy:** Reduce largest remaining penalty (tracking_contacts_shaped_force) by 2x
 
@@ -801,13 +599,13 @@ tracking_contacts_shaped_force_reward_scale = 0.2  # was 0.4
 
 ---
 
-### Run_06 (Retry): Reduced Action Rate + Feet Clearance Penalties (Job ID: 135012)
+### Run_06: Reduced Action Rate + Feet Clearance Penalties (Job ID: TBD)
 **Date:** 2025-12-18
-**Status:** 🔄 Running
+**Status:** ⏳ Pending submission
 **Duration:** ~30 minutes
 **Objective:** Test combined penalty reduction on action smoothness and feet clearance
 
-**Note:** This is a retry of the failed Run_06 (Job ID: 134996) with the FileNotFoundError fix applied.
+**Legacy Job IDs:** 134996 (failed - FileNotFoundError), 135012 (failed - FileNotFoundError)
 
 **Strategy:** Reduce both action_rate and feet_clearance penalties by 2x
 
@@ -856,13 +654,13 @@ action_rate_reward_scale = -0.05  # was -0.1
 
 ---
 
-### Run_07 (Retry): Higher Base Height Termination (Job ID: 135015)
+### Run_07: Higher Base Height Termination (Job ID: 135037)
 **Date:** 2025-12-18
 **Status:** 🔄 Running
 **Duration:** ~30 minutes
 **Objective:** Test effect of stricter base height termination on posture quality
 
-**Note:** This is a retry of the failed Run_07 (Job ID: 135002) with the FileNotFoundError fix applied.
+**Legacy Job IDs:** 135002 (failed - FileNotFoundError), 135015 (failed - FileNotFoundError)
 
 **Strategy:** Same as Run_05 but with 4x higher base_height_min termination threshold
 
