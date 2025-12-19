@@ -9,6 +9,7 @@ import isaaclab.envs.mdp as mdp
 import isaaclab.sim as sim_utils
 from isaaclab.assets import ArticulationCfg
 from isaaclab.envs import DirectRLEnvCfg
+from isaaclab.managers import EventTermCfg, SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
 from isaaclab.utils import configclass
@@ -95,8 +96,8 @@ class Rob6323Go2EnvCfg(DirectRLEnvCfg):
     current_vel_visualizer_cfg.markers["arrow"].scale = (0.5, 0.5, 0.5)
 
     # reward scales
-    lin_vel_reward_scale = 16.0
-    yaw_rate_reward_scale = 8.0
+    lin_vel_reward_scale = 3.0
+    yaw_rate_reward_scale = 1.5
     action_rate_reward_scale = -0.1
 
     # Additional reward scales
@@ -111,3 +112,22 @@ class Rob6323Go2EnvCfg(DirectRLEnvCfg):
 
     # collision penalty
     base_collision_penalty_scale = -1.0
+
+    # events
+    @configclass
+    class EventCfg:
+        """Configuration for domain randomization events."""
+
+        robot_physics_material = EventTermCfg(
+            func=mdp.randomize_rigid_body_material,
+            mode="reset",
+            params={
+                "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
+                "static_friction_range": (0.5, 1.25),
+                "dynamic_friction_range": (0.5, 1.25),
+                "restitution_range": (0.0, 0.1),
+                "num_buckets": 250,
+            },
+        )
+
+    events: EventCfg = EventCfg()
