@@ -559,8 +559,8 @@ self.extras["log"].update(extras)
 
 ### Run_05: Reduced Contact Force Penalty (Job ID: 135062)
 **Date:** 2025-12-18
-**Status:** 🔄 Running
-**Duration:** ~30 minutes
+**Status:** Completed
+**Duration:** 500 iterations
 **Objective:** Push mean reward positive by reducing contact force penalty bottleneck identified in Run_04
 
 **Legacy Job IDs:** 134990 (failed - FileNotFoundError), 135007 (failed - FileNotFoundError)
@@ -602,7 +602,7 @@ tracking_contacts_shaped_force_reward_scale = 0.2  # was 0.4
 ### Run_06: Reduced Action Rate + Feet Clearance Penalties (Job ID: 135327)
 **Date:** 2025-12-18
 **Status:** ✅ Completed
-**Duration:** ~30 minutes
+**Duration:** 500 iterations
 **Objective:** Test combined penalty reduction on action smoothness and feet clearance
 
 **Legacy Job IDs:** 134996 (failed - FileNotFoundError), 135012 (failed - FileNotFoundError)
@@ -656,8 +656,8 @@ action_rate_reward_scale = -0.05  # was -0.1
 
 ### Run_07: Higher Base Height Termination (Job ID: 135037)
 **Date:** 2025-12-18
-**Status:** 🔄 Running
-**Duration:** ~30 minutes
+**Status:** Completed
+**Duration:** 500 iterations
 **Objective:** Test effect of stricter base height termination on posture quality
 
 **Legacy Job IDs:** 135002 (failed - FileNotFoundError), 135015 (failed - FileNotFoundError)
@@ -698,8 +698,8 @@ base_height_min = 0.2  # was 0.05
 
 ### Run_08: Boosted Tracking Rewards (Job ID: 135358)
 **Date:** 2025-12-19
-**Status:** 🔄 Running
-**Duration:** ~30 minutes
+**Status:** Completed
+**Duration:** 500 iterations
 **Objective:** Achieve positive mean reward by further boosting tracking rewards from Run_04
 
 **Strategy:** Continue Run_04's successful tracking boost strategy with 33% increase
@@ -739,7 +739,7 @@ yaw_rate_reward_scale = 2.0  # was 1.5 (+33% boost)
 ### Run_09: Reduced Action Rate Penalty (Job ID: 135367)
 **Date:** 2025-12-19
 **Status:** ✅ Completed
-**Duration:** ~30 minutes
+**Duration:** 500 iterations
 **Objective:** Test if reducing action smoothness constraint improves mean reward
 
 **Strategy:** Reduce 2nd largest penalty (action_rate) by 2x while maintaining Run_04 tracking rewards
@@ -784,7 +784,7 @@ action_rate_reward_scale = -0.05  # was -0.1 (2x reduction)
 ### Run_10: Massive Tracking Reward Boost (Job ID: 135378)
 **Date:** 2025-12-19
 **Status:** ✅ Completed
-**Duration:** ~30 minutes
+**Duration:** 500 iterations
 **Objective:** Achieve instructor's target tracking metrics (~48 for lin_vel, ~24 for ang_vel)
 
 **Strategy:** Dramatically boost tracking rewards (5.3x from Run_04) to reach expected performance levels
@@ -825,10 +825,10 @@ yaw_rate_reward_scale = 8.0   # was 1.5 (+433% boost)
 
 ---
 
-### Run_11a: Domain Randomization - Friction Only (Job ID: TBD)
+### Run_11a: Domain Randomization - Friction Only (Job ID: 135457)
 **Date:** 2025-12-19
-**Status:** ⏳ Planned
-**Duration:** ~30 minutes
+**Status:** Completed
+**Duration:** 500 iterations
 **Objective:** Validate EventManager integration and improve sim-to-real robustness with friction randomization
 
 **Strategy:** Add conservative domain randomization (friction only) to baseline Run_04 configuration
@@ -911,12 +911,25 @@ yaw_rate_reward_scale = 1.5  # was 8.0 from Run_10
 - Prepares policy for real-world surface variations (wood, carpet, concrete, etc.)
 - Low risk: unlikely to destabilize training
 
-**Future Extensions (Run_11b, Run_11c):**
-- Run_11b: Add mass randomization (±1 to +3 kg payload)
-- Run_11c: Add actuator gain randomization + random pushes (higher risk)
+**Results:**
+- **Mean Reward:** -61.10
+- **track_lin_vel_xy_exp:** 0.7777
+- **track_ang_vel_z_exp:** 0.5113
+- **lin_vel_error:** 0.7001
+- **ang_vel_error:** 0.7386
+- **Episode length:** 999.0
+
+**Analysis:**
+- Performance regressed vs Run_04 (lin_vel 2.701, mean reward -11.28)
+- Friction randomization likely too aggressive for current reward balance; retuning needed before adding more randomization
+
+**Revised Run_11 Plan (Next):**
+- Run_11b: Friction DR (staged) - Resume from a strong non-DR checkpoint (e.g., Run_06), start with a narrow friction range (e.g., 0.8-1.2), then widen to (0.5-1.25); reduce commanded linear velocity ranges to about +/-0.6 m/s.
+- Run_11c: Friction + mass DR - Once Run_11b is stable, add base-mass randomization (e.g., -1 to +3 kg) and continue training from the Run_11b checkpoint.
+- Optional follow-up: Only after Run_11c works, consider actuator gain randomization and/or random pushes.
 
 **Validation Checklist:**
-- [ ] Training completes without errors
-- [ ] Mean reward comparable to Run_04 (-11.28 ± 20%)
+- [x] Training completes without errors
+- [ ] Mean reward comparable to Run_04 (-11.28 +/- 20%)
 - [ ] Locomotion quality maintained
 - [ ] TensorBoard shows friction randomization applied (check event logs)
