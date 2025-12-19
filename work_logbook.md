@@ -696,9 +696,9 @@ base_height_min = 0.2  # was 0.05
 
 ---
 
-### Run_08: Boosted Tracking Rewards (Job ID: TBD)
-**Date:** 2025-12-18
-**Status:** ⏳ Planned
+### Run_08: Boosted Tracking Rewards (Job ID: 135358)
+**Date:** 2025-12-19
+**Status:** 🔄 Running
 **Duration:** ~30 minutes
 **Objective:** Achieve positive mean reward by further boosting tracking rewards from Run_04
 
