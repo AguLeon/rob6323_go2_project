@@ -559,8 +559,8 @@ self.extras["log"].update(extras)
 
 ### Run_05: Reduced Contact Force Penalty (Job ID: 134990)
 **Date:** 2025-12-18
-**Status:** 🔄 Running
-**Duration:** ~30 minutes
+**Status:** ❌ FAILED - FileNotFoundError during TensorBoard initialization
+**Duration:** Failed before training started
 **Objective:** Push mean reward positive by reducing contact force penalty bottleneck identified in Run_04
 
 **Strategy:** Reduce largest remaining penalty (tracking_contacts_shaped_force) by 2x
@@ -594,6 +594,33 @@ tracking_contacts_shaped_force_reward_scale = 0.2  # was 0.4
 - All other penalties < 1.0
 - 2x reduction aligns contact penalty with other regularization terms
 - Conservative change maintains tutorial structure
+
+**Failure Analysis:**
+
+**Error:** `FileNotFoundError: [Errno 2] No such file or directory: b'/workspace/isaaclab/logs/rsl_rl/go2_flat_direct/2025-12-18_21-28-18/events.out.tfevents.1766111317.b-31-179.37.0'`
+
+**Root Cause:**
+- TensorBoard writer in OnPolicyRunner tries to create events file before log directory exists
+- Race condition: `OnPolicyRunner.__init__()` (line 189 of train.py) initializes TensorBoard before `dump_yaml()` (lines 203-204) creates directory structure
+- SLURM script correctly creates job-specific directory, but nested subdirectory `rsl_rl/go2_flat_direct/TIMESTAMP/` must be created by train.py
+- Likely intermittent filesystem sync issue on Greene cluster
+
+**Fix Applied:**
+
+**File:** `scripts/rsl_rl/train.py`
+```python
+# Added at line 188, before OnPolicyRunner initialization:
+# ensure log directory exists before creating runner
+os.makedirs(log_dir, exist_ok=True)
+```
+
+**Why this fixes it:**
+- Guarantees log directory exists before OnPolicyRunner tries to create TensorBoard writer
+- Eliminates race condition entirely
+- Minimal change (1 line)
+- Follows best practice: create resources just before use
+
+**Re-run Plan:** Same configuration, submit new job after fix is deployed
 
 ---
 
@@ -650,8 +677,10 @@ action_rate_reward_scale = -0.05  # was -0.1
 
 ---
 
-### Run_07: Higher Base Height Termination (Planned)
-**Status:** 📋 Planned
+### Run_07: Higher Base Height Termination (Job ID: 135002)
+**Date:** 2025-12-18
+**Status:** 🔄 Running
+**Duration:** ~30 minutes
 **Objective:** Test effect of stricter base height termination on posture quality
 
 **Strategy:** Same as Run_05 but with 4x higher base_height_min termination threshold
