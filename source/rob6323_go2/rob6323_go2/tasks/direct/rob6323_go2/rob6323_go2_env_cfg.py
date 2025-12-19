@@ -58,6 +58,17 @@ class Rob6323Go2EventCfgStage2:
         },
     )
 
+    robot_base_mass = EventTermCfg(
+        func=mdp.randomize_rigid_body_mass,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names="base"),
+            # Additive payload mass in kg. Negative values simulate lighter configurations.
+            "mass_range": (-1.0, 3.0),
+            "operation": "add",
+        },
+    )
+
 
 @configclass
 class Rob6323Go2EnvCfg(DirectRLEnvCfg):
@@ -166,3 +177,10 @@ class Rob6323Go2EnvCfg(DirectRLEnvCfg):
 
     # events (Run_11b): Stage 1 enabled by default; switch to `Rob6323Go2EventCfgStage2()` once stable.
     events: Rob6323Go2EventCfgStage1 | Rob6323Go2EventCfgStage2 | None = Rob6323Go2EventCfgStage1()
+
+
+@configclass
+class Rob6323Go2EnvCfgRun11c(Rob6323Go2EnvCfg):
+    """Run_11c: Stage 2 domain randomization (wider friction + base mass)."""
+
+    events: Rob6323Go2EventCfgStage1 | Rob6323Go2EventCfgStage2 | None = Rob6323Go2EventCfgStage2()
