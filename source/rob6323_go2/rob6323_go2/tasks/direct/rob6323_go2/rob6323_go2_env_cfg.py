@@ -106,7 +106,7 @@ class Rob6323Go2EnvCfg(DirectRLEnvCfg):
     foot_slip_reward_scale = -0.1
 
     # termination
-    base_height_min = 0.2
+    base_height_min = 0.05
 
     # collision penalty
     base_collision_penalty_scale = -1.0
