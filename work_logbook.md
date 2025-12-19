@@ -928,6 +928,9 @@ yaw_rate_reward_scale = 1.5  # was 8.0 from Run_10
 - Run_11c: Friction + mass DR (stage 2) - Train from scratch; widen friction to (0.5-1.25) and add base-mass randomization (e.g., -1 to +3 kg), while keeping reduced command ranges.
 - Optional follow-up: Only after Run_11c works, consider actuator gain randomization and/or random pushes.
 
+**Run Status:**
+- Run_11b Job ID: 135552 (running)
+
 **Validation Checklist:**
 - [x] Training completes without errors
 - [ ] Mean reward comparable to Run_04 (-11.28 +/- 20%)
