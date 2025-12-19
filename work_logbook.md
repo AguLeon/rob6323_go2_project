@@ -108,6 +108,22 @@ This file tracks all modifications made to the baseline repository for the Go2 q
 
 ---
 
+## Debugging Fixes
+
+### Fix 1: Missing numpy import (Job 134821, 134834)
+**Error:** `NameError: name 'np' is not defined` at line 365
+**File:** `rob6323_go2_env.py`
+**Fix:** Added `import numpy as np` at line 11
+**Context:** Raibert heuristic used `np.pi` for clock input calculation
+
+### Fix 2: Tensor shape mismatch (Job 134834, 134838)
+**Error:** `RuntimeError: stack expects each tensor to be equal size, but got [4096] at entry 0 and [4096, 1] at entry 10`
+**File:** `rob6323_go2_env.py`
+**Fix:** Added `.squeeze()` to line 215 in collision penalty calculation
+**Context:** `torch.max(..., dim=1)[0]` returned shape `[4096, 1]` instead of `[4096]`, causing mismatch when stacking rewards
+
+---
+
 ## Summary of Implementation
 
 **Tutorial Completion:** Parts 1-6 fully implemented
@@ -194,73 +210,85 @@ This file tracks all modifications made to the baseline repository for the Go2 q
 
 ---
 
-### Run_02: Enhanced Rewards (Current)
-**Date:** 2025-12-18 (In Progress)
-**Status:** 🔄 Running
-**Expected Duration:** ~30 minutes
+### Run_02: Full Implementation (Job ID: 134838)
+**Date:** 2025-12-18 18:04:49
+**Status:** ❌ Failed (Reward Imbalance)
+**Duration:** 500 iterations
 
 **Configuration:**
-- **Environment:** Full tutorial implementation (Parts 1-6)
+- **Environment:** Full tutorial implementation (Parts 1-6) + collision penalties
 - **Observation Space:** 52 (added 4 clock inputs for gait)
 - **Action Space:** 12
 - **Num Envs:** 4096
 - **Episode Length:** 20s
-- **Reward Terms:** 10 terms (see Summary of Implementation above)
+- **Reward Terms:** 11 terms
   - Velocity tracking (2 terms)
   - Action smoothing (1 term)
-  - Posture stabilization (3 terms)
-  - Gait shaping (1 term)
-  - Foot interaction (2 terms)
-  - Enhanced contact regularization (1 term)
+  - Posture stabilization (4 terms: orient, lin_vel_z, dof_vel, ang_vel_xy)
+  - Gait shaping (1 term: Raibert heuristic)
+  - Foot interaction (2 terms: clearance, contact force tracking)
+  - Collision penalty (1 term: base contact penalty)
 - **Actuator:** Manual PD controller (Kp=20.0, Kd=0.5, torque_limits=100.0)
 - **Termination:** Base contact, upside-down, base height < 0.05m
 
-**Expected Improvements:**
-- Smoother motion from action rate penalties
-- Better posture stability from orientation/velocity penalties
-- Proper gait patterns from Raibert heuristic and foot clearance
-- More natural walking from contact force regularization
+**Implementation Details:**
+- **File:** `rob6323_go2_env_cfg.py`
+  - Line 111: `base_collision_penalty_scale = -1.0`
+- **File:** `rob6323_go2_env.py`
+  - Line 11: Added `import numpy as np` (Fix 1)
+  - Line 61: Added "base_collision_penalty" logging
+  - Line 215: Added `.squeeze()` to collision penalty (Fix 2)
+  - Lines 213-216: Collision penalty calculation
+    - Penalizes base contact forces above 0.5N threshold
+    - Uses clamped linear penalty scaled by contact force magnitude
 
-**Notes:**
-- First run with complete tutorial implementation
-- Will compare performance metrics against Run_01 baseline
-- Results pending...
+**Results:**
+- **Mean Reward:** -252.64 (vs Run_01: +29.52)
+- **Velocity Tracking Performance:**
+  - Lin vel XY: 0.10 (vs Run_01: 0.98) → **90% degradation**
+  - Ang vel Z: 0.09 (vs Run_01: 0.49) → **81% degradation**
+- **Penalty Breakdown:**
+  - Contact force tracking: -6.37 (largest penalty)
+  - Raibert heuristic: -3.83
+  - Action rate: -1.70
+  - Feet clearance: -0.55
+  - Orient: -0.11
+  - Others: minimal
+
+**Analysis:**
+- **Primary Issue:** Reward scale imbalance
+  - Tracking rewards: ~1.5 total positive potential
+  - Penalties: ~12.5 total negative accumulated
+  - Ratio: 8:1 penalties overwhelming tracking
+- **Robot Behavior:** Learned "do nothing" policy
+  - Standing still minimizes penalties
+  - Fails primary objective (velocity tracking)
+  - Episodes reach full length (999 steps) without crashes
+- **Root Cause:** Penalty scales (especially contact_force: 4.0, Raibert: -10.0, feet_clearance: -30.0) too aggressive relative to tracking rewards
+
+**Logs Location:** `.logs/Run_02/rsl_rl/go2_flat_direct/2025-12-18_18-04-49/`
 
 ---
 
-### Run_03: Collision Penalties (Prepared)
-**Date:** 2025-12-18 (Ready to launch)
+### Run_03: Rebalanced Rewards (Ready to Launch)
+**Date:** TBD
 **Status:** 📝 Prepared
 **Expected Duration:** ~30 minutes
 
-**Configuration:**
-- **Environment:** Run_02 + collision penalty reward
-- **Observation Space:** 52 (4 clock inputs for gait)
-- **Action Space:** 12
-- **Num Envs:** 4096
-- **Episode Length:** 20s
-- **Reward Terms:** 11 terms
-  - All 10 terms from Run_02
-  - Base collision penalty (new)
-- **Actuator:** Manual PD controller (Kp=20.0, Kd=0.5, torque_limits=100.0)
-- **Termination:** Base contact, upside-down, base height < 0.05m
+**Objective:** Fix reward imbalance from Run_02 by reducing the 2 largest penalty scales
 
 **Changes from Run_02:**
 - **File:** `rob6323_go2_env_cfg.py`
-  - Line 111: Added `base_collision_penalty_scale = -1.0`
-- **File:** `rob6323_go2_env.py`
-  - Line 61: Added logging for "base_collision_penalty"
-  - Lines 212-215: Implemented collision penalty calculation
-    - Penalizes base contact forces above 0.5N threshold
-    - Uses clamped linear penalty scaled by contact force magnitude
-  - Line 228: Integrated into rewards dictionary
+  - Line 32: `raibert_heuristic_reward_scale = -1.0` (was -10.0, 10x reduction)
+  - Line 34: `tracking_contacts_shaped_force_reward_scale = 0.4` (was 4.0, 10x reduction)
 
-**Expected Improvements:**
-- Proactive avoidance of base collisions before termination
-- Smoother recovery from near-collision states
-- Better stability during dynamic maneuvers
+**Unchanged from Run_02:**
+- `feet_clearance_reward_scale = -30.0`
+- `action_rate_reward_scale = -0.1`
+- All posture stability penalties (orient, lin_vel_z, dof_vel, ang_vel_xy)
+- Collision penalty, tracking rewards, PD controller, observation space
 
-**Notes:**
-- Addresses final missing project goal (collision penalties)
-- Complements existing termination-based collision detection
-- Ready to launch for comparison with Run_02
+**Expected Impact:**
+- Reduce total penalties from ~12.5 to ~2.5 (targeting similar magnitude as tracking rewards ~1.5)
+- Robot should pursue velocity tracking while still experiencing gait and contact penalties
+- Minimal changes allow isolated assessment of these two dominant penalty terms

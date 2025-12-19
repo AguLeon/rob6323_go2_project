@@ -29,9 +29,9 @@ class Rob6323Go2EnvCfg(DirectRLEnvCfg):
     observation_space = 52  # 48 base + 4 clock inputs
     state_space = 0
     debug_vis = True
-    raibert_heuristic_reward_scale = -10.0
+    raibert_heuristic_reward_scale = -1.0
     feet_clearance_reward_scale = -30.0
-    tracking_contacts_shaped_force_reward_scale = 4.0
+    tracking_contacts_shaped_force_reward_scale = 0.4
 
     # PD control gains
     Kp = 20.0  # Proportional gain
