@@ -557,8 +557,10 @@ self.extras["log"].update(extras)
 
 ---
 
-### Run_05: Reduced Contact Force Penalty (Planned)
-**Status:** 📋 Planned
+### Run_05: Reduced Contact Force Penalty (Job ID: 134990)
+**Date:** 2025-12-18
+**Status:** 🔄 Running
+**Duration:** ~30 minutes
 **Objective:** Push mean reward positive by reducing contact force penalty bottleneck identified in Run_04
 
 **Strategy:** Reduce largest remaining penalty (tracking_contacts_shaped_force) by 2x
@@ -592,3 +594,49 @@ tracking_contacts_shaped_force_reward_scale = 0.2  # was 0.4
 - All other penalties < 1.0
 - 2x reduction aligns contact penalty with other regularization terms
 - Conservative change maintains tutorial structure
+
+---
+
+### Run_06: Reduced Action Rate Penalty (Planned)
+**Status:** 📋 Planned
+**Objective:** Test action smoothness vs tracking performance tradeoff
+
+**Strategy:** Reduce action_rate penalty (second largest penalty at -0.906) by 2x
+
+**Configuration:**
+- **Seed:** 42
+
+**Changes from Run_04:**
+
+**File:** `rob6323_go2_env_cfg.py`
+```python
+# Line 100: Reduce action rate penalty
+action_rate_reward_scale = -0.05  # was -0.1
+```
+
+**Unchanged from Run_04:**
+- All tracking rewards (lin_vel: 3.0, yaw: 1.5)
+- All gait penalties (Raibert: -1.0, clearance: -30.0, contact_force: 0.4)
+- All posture penalties (orient, lin_vel_z, dof_vel, ang_vel_xy)
+- PD controller, observation space, termination criteria
+
+**Expected Impact:**
+- Action rate penalty reduced from -0.906 to ~-0.45
+- Total penalties: ~3.1/step (vs Run_04: ~3.6/step)
+- Expected mean reward: Slight improvement over Run_04
+- May allow more aggressive actions for better tracking
+- Risk: Potential increase in action jerkiness
+
+**Rationale:**
+- Tests whether action smoothing constraint is limiting performance
+- Action_rate is #2 penalty contributor in Run_04
+- Grading rubric requires both smoothness AND tracking
+- Need to find optimal tradeoff point
+- If gait quality degrades, we know -0.1 is appropriate
+- If tracking improves without jerkiness, -0.05 is better
+
+**Comparison to Run_05:**
+- Run_05: Reduces contact_force (largest penalty, affects foot landing)
+- Run_06: Reduces action_rate (second largest, affects motion smoothness)
+- Both test different bottlenecks independently
+- Results will guide which penalty scale is more critical
