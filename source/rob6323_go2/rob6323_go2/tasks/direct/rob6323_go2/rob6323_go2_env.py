@@ -71,9 +71,18 @@ class Rob6323Go2Env(DirectRLEnv):
                 "ang_vel_error",
                 "base_orient_error",
                 "torque_squared",
+                "base_height",
+                "pitch_angle",
+                "roll_angle",
             ]
         }
         self._episode_steps = torch.zeros(self.num_envs, dtype=torch.int, device=self.device)
+
+        # Gait analysis tracking
+        self._foot_contact_history = torch.zeros(self.num_envs, 4, dtype=torch.bool, device=self.device)
+        self._foot_air_time = torch.zeros(self.num_envs, 4, dtype=torch.float, device=self.device)
+        self._foot_stance_time = torch.zeros(self.num_envs, 4, dtype=torch.float, device=self.device)
+        self._gait_cycle_complete = torch.zeros(self.num_envs, 4, dtype=torch.bool, device=self.device)
 
         # variables needed for action rate penalization
         # Shape: (num_envs, action_dim, history_length)
@@ -256,6 +265,34 @@ class Rob6323Go2Env(DirectRLEnv):
         self._episode_metrics["base_orient_error"] += torch.acos(torch.clamp(self.robot.data.projected_gravity_b[:, 2], -1.0, 1.0))
         torque_squared = torch.sum(torch.square(self.robot.data.applied_torque), dim=1)
         self._episode_metrics["torque_squared"] += torque_squared
+
+        # Base stability metrics
+        self._episode_metrics["base_height"] += self.robot.data.root_pos_w[:, 2]
+        # Convert quaternion to euler angles for pitch/roll
+        quat = self.robot.data.root_quat_w
+        # Roll (x-axis rotation)
+        sinr_cosp = 2 * (quat[:, 0] * quat[:, 1] + quat[:, 2] * quat[:, 3])
+        cosr_cosp = 1 - 2 * (quat[:, 1] ** 2 + quat[:, 2] ** 2)
+        roll = torch.atan2(sinr_cosp, cosr_cosp)
+        # Pitch (y-axis rotation)
+        sinp = 2 * (quat[:, 0] * quat[:, 2] - quat[:, 3] * quat[:, 1])
+        pitch = torch.asin(torch.clamp(sinp, -1.0, 1.0))
+        self._episode_metrics["pitch_angle"] += torch.abs(pitch)
+        self._episode_metrics["roll_angle"] += torch.abs(roll)
+
+        # Gait analysis - track contact state changes
+        foot_forces = torch.norm(self._contact_sensor.data.net_forces_w[:, self._feet_ids_sensor, :], dim=-1)
+        current_contacts = foot_forces > 1.0  # Binary contact state
+
+        # Update air/stance times
+        for i in range(4):
+            # Increment air time when not in contact
+            self._foot_air_time[:, i] += (~current_contacts[:, i]).float() * self.step_dt
+            # Increment stance time when in contact
+            self._foot_stance_time[:, i] += current_contacts[:, i].float() * self.step_dt
+
+        self._foot_contact_history = current_contacts
+
         self._episode_steps += 1
 
         return reward
@@ -312,7 +349,24 @@ class Rob6323Go2Env(DirectRLEnv):
             extras["Metrics/" + key] = episodic_metric_avg.item()
             self._episode_metrics[key][env_ids] = 0.0
         extras["Metrics/episode_length"] = torch.mean(episode_steps).item()
+
+        # Gait metrics - duty factor (stance time / total cycle time)
+        total_time = self._foot_air_time[env_ids] + self._foot_stance_time[env_ids]
+        duty_factor = self._foot_stance_time[env_ids] / torch.clamp(total_time, min=0.01)
+        extras["Gait/duty_factor"] = torch.mean(duty_factor).item()
+
+        # Gait symmetry - compare diagonal pairs (FL-RR, FR-RL)
+        df_fl_rr = torch.abs(duty_factor[:, 0] - duty_factor[:, 3])
+        df_fr_rl = torch.abs(duty_factor[:, 1] - duty_factor[:, 2])
+        gait_symmetry = (df_fl_rr + df_fr_rl) / 2.0
+        extras["Gait/symmetry_error"] = torch.mean(gait_symmetry).item()
+
+        # Reset gait tracking
+        self._foot_air_time[env_ids] = 0.0
+        self._foot_stance_time[env_ids] = 0.0
+        self._gait_cycle_complete[env_ids] = False
         self._episode_steps[env_ids] = 0
+
         self.extras["log"].update(extras)
 
         # Log termination reasons

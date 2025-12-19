@@ -31,7 +31,7 @@ class Rob6323Go2EnvCfg(DirectRLEnvCfg):
     debug_vis = True
     raibert_heuristic_reward_scale = -1.0
     feet_clearance_reward_scale = -30.0
-    tracking_contacts_shaped_force_reward_scale = 0.4
+    tracking_contacts_shaped_force_reward_scale = 0.2
 
     # PD control gains
     Kp = 20.0  # Proportional gain
