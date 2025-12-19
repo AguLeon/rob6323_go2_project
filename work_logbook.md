@@ -647,3 +647,41 @@ action_rate_reward_scale = -0.05  # was -0.1
 - Run_05 targets single largest bottleneck
 - Run_06 targets two smaller bottlenecks simultaneously
 - Results will reveal whether single large penalty or multiple small penalties are more critical
+
+---
+
+### Run_07: Higher Base Height Termination (Planned)
+**Status:** 📋 Planned
+**Objective:** Test effect of stricter base height termination on posture quality
+
+**Strategy:** Same as Run_05 but with 4x higher base_height_min termination threshold
+
+**Configuration:**
+- **Seed:** 42
+
+**Changes from Run_05:**
+
+**File:** `rob6323_go2_env_cfg.py`
+```python
+# Line 109: Increase base height termination threshold
+base_height_min = 0.2  # was 0.05
+```
+
+**Unchanged from Run_05:**
+- All tracking rewards (lin_vel: 3.0, yaw: 1.5)
+- All penalties (contact_force: 0.2, action_rate: -0.1, clearance: -30.0, Raibert: -1.0, etc.)
+- PD controller, observation space
+
+**Expected Impact:**
+- Episodes terminate if base drops below 20cm (vs 5cm in Run_05)
+- Encourages robot to maintain upright posture
+- May increase early terminations during initial learning
+- Could improve base stability metrics (pitch, roll, height)
+- Risk: Harder exploration, longer training time
+
+**Rationale:**
+- Run_04 showed perfect base contact avoidance (0.00)
+- Original threshold (0.05m) may be too lenient
+- Stricter threshold forces robot to learn better posture
+- Tests whether termination criteria can act as implicit reward shaping
+- Compares to Run_05 to isolate effect of termination threshold alone
