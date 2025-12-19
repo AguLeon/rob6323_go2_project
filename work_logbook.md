@@ -599,9 +599,9 @@ tracking_contacts_shaped_force_reward_scale = 0.2  # was 0.4
 
 ---
 
-### Run_06: Reduced Action Rate + Feet Clearance Penalties (Job ID: TBD)
+### Run_06: Reduced Action Rate + Feet Clearance Penalties (Job ID: 135327)
 **Date:** 2025-12-18
-**Status:** ⏳ Pending submission
+**Status:** ✅ Completed
 **Duration:** ~30 minutes
 **Objective:** Test combined penalty reduction on action smoothness and feet clearance
 
@@ -693,3 +693,88 @@ base_height_min = 0.2  # was 0.05
 - Stricter threshold forces robot to learn better posture
 - Tests whether termination criteria can act as implicit reward shaping
 - Compares to Run_05 to isolate effect of termination threshold alone
+
+---
+
+### Run_08: Boosted Tracking Rewards (Job ID: TBD)
+**Date:** 2025-12-18
+**Status:** ⏳ Planned
+**Duration:** ~30 minutes
+**Objective:** Achieve positive mean reward by further boosting tracking rewards from Run_04
+
+**Strategy:** Continue Run_04's successful tracking boost strategy with 33% increase
+
+**Configuration:**
+- **Seed:** 42
+
+**Changes from Run_04:**
+
+**File:** `rob6323_go2_env_cfg.py`
+```python
+# Lines 98-99: Further boost tracking rewards
+lin_vel_reward_scale = 4.0  # was 3.0 (+33% boost)
+yaw_rate_reward_scale = 2.0  # was 1.5 (+33% boost)
+```
+
+**Unchanged from Run_04:**
+- All penalties (contact_force: 0.4, action_rate: -0.1, clearance: -30.0, Raibert: -1.0)
+- PD controller, observation space, termination criteria (base_height_min: 0.05)
+
+**Expected Impact:**
+- Positive reward potential: 4.5 → ~6.0/step
+- Mean reward: Target +5 to +15 range (was -11.28)
+- Lin vel tracking: Maintain or improve 2.701
+- Zero crashes maintained (proven Run_04 penalty structure)
+- Should finally achieve positive territory
+
+**Rationale:**
+- Run_04 proved tracking boost strategy works (Run_03→Run_04 eliminated crashes)
+- Run_05 failure confirmed contact_force penalty MUST stay at 0.4
+- Run_07 failure confirmed termination changes counterproductive
+- Amplifying what works (tracking rewards) rather than touching penalties
+- Low risk: maintains all proven penalty dynamics from Run_04
+
+---
+
+### Run_09: Reduced Action Rate Penalty (Job ID: TBD)
+**Date:** 2025-12-18
+**Status:** ⏳ Planned
+**Duration:** ~30 minutes
+**Objective:** Test if reducing action smoothness constraint improves mean reward
+
+**Strategy:** Reduce 2nd largest penalty (action_rate) by 2x while maintaining Run_04 tracking rewards
+
+**Configuration:**
+- **Seed:** 42
+
+**Changes from Run_04:**
+
+**File:** `rob6323_go2_env_cfg.py`
+```python
+# Line 100: Reduce action rate penalty
+action_rate_reward_scale = -0.05  # was -0.1 (2x reduction)
+```
+
+**Unchanged from Run_04:**
+- All tracking rewards (lin_vel: 3.0, yaw: 1.5)
+- All other penalties (contact_force: 0.4, clearance: -30.0, Raibert: -1.0)
+- PD controller, observation space, termination criteria (base_height_min: 0.05)
+
+**Expected Impact:**
+- Action rate penalty: -0.906 → ~-0.45
+- Mean reward: Target -6 to -8 range (was -11.28)
+- May allow more dynamic/aggressive actions
+- Trade-off: Slightly jerkier motions acceptable for better tracking
+- Still functional locomotion expected
+
+**Rationale:**
+- Action rate penalty (-0.906) is 2nd largest after contact force
+- Contact force CANNOT be reduced (Run_05 proved this breaks locomotion)
+- Conservative test: only changes one penalty
+- Balances action smoothness vs. performance
+- Helps isolate impact of action smoothness constraint
+
+**Comparison to Run_08:**
+- Run_08: Boosts positive rewards (more aggressive approach)
+- Run_09: Reduces penalties (more conservative approach)
+- Results will show optimal strategy for improvement
