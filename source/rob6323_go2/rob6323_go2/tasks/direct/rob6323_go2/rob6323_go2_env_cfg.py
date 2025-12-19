@@ -103,6 +103,7 @@ class Rob6323Go2EnvCfg(DirectRLEnvCfg):
     lin_vel_z_reward_scale = -0.02
     dof_vel_reward_scale = -0.0001
     ang_vel_xy_reward_scale = -0.001
+    foot_slip_reward_scale = -0.1
 
     # termination
     base_height_min = 0.05

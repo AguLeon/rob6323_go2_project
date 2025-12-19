@@ -59,7 +59,8 @@ class Rob6323Go2Env(DirectRLEnv):
                 "ang_vel_xy",
                 "feet_clearance",
                 "tracking_contacts_shaped_force",
-                "base_collision_penalty"
+                "base_collision_penalty",
+                "foot_slip"
             ]
         }
         # Performance metrics (not rewards)
@@ -226,6 +227,10 @@ class Rob6323Go2Env(DirectRLEnv):
         base_contact_force_magnitude = torch.max(torch.norm(net_contact_forces[:, :, self._base_id], dim=-1), dim=1)[0].squeeze()
         rew_base_collision = torch.clamp(base_contact_force_magnitude - 0.5, min=0.0)
 
+        # Foot slip - penalize horizontal foot velocity during stance
+        foot_velocities = self.robot.data.body_vel_w[:, self._feet_ids, :2]
+        rew_foot_slip = torch.sum(torch.norm(foot_velocities, dim=-1) * self.desired_contact_states, dim=1)
+
         rewards = {
             "track_lin_vel_xy_exp": lin_vel_error_mapped * self.cfg.lin_vel_reward_scale * self.step_dt,
             "track_ang_vel_z_exp": yaw_rate_error_mapped * self.cfg.yaw_rate_reward_scale * self.step_dt,
@@ -238,6 +243,7 @@ class Rob6323Go2Env(DirectRLEnv):
             "feet_clearance": rew_feet_clearance * self.cfg.feet_clearance_reward_scale,
             "tracking_contacts_shaped_force": rew_tracking_contacts_shaped_force * self.cfg.tracking_contacts_shaped_force_reward_scale,
             "base_collision_penalty": rew_base_collision * self.cfg.base_collision_penalty_scale,
+            "foot_slip": rew_foot_slip * self.cfg.foot_slip_reward_scale,
         }
         reward = torch.sum(torch.stack(list(rewards.values())), dim=0)
         # Logging rewards

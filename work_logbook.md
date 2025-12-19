@@ -9,14 +9,20 @@ This file tracks all modifications made to the baseline repository for the Go2 q
 ### Changes Made
 
 #### 1. Contact Sensor Registration
-**File:** `source/rob6323_go2/rob6323_go2/tasks/direct/rob6323_go2/rob6323_go2_env.py`
-- **Line 71:** Added `self.scene.sensors["contact_sensor"] = self._contact_sensor`
+**File:** `rob6323_go2_env.py`
+```python
+# Line 71
+self.scene.sensors["contact_sensor"] = self._contact_sensor
+```
 - **Purpose:** Properly register the contact sensor with the scene for force data tracking
 - **Context:** Required for implementing contact-based rewards and terminations
 
 #### 2. Base Height Termination Threshold
-**File:** `source/rob6323_go2/rob6323_go2/tasks/direct/rob6323_go2/rob6323_go2_env_cfg.py`
-- **Line 84:** Added `base_height_min = 0.05`
+**File:** `rob6323_go2_env_cfg.py`
+```python
+# Line 84
+base_height_min = 0.05
+```
 - **Purpose:** Lowered termination threshold from 0.20m to 0.05m to allow robot to crouch lower during learning
 - **Context:** Part of early termination criteria to speed up training and encourage elevated base
 
@@ -26,101 +32,195 @@ This file tracks all modifications made to the baseline repository for the Go2 q
 
 ### Part 1: Action Rate Penalties
 **File:** `rob6323_go2_env.py`
-- **Lines 58-64:** Added `last_actions` buffer (shape: num_envs × action_dim × 3) for action history tracking
-- **Lines 153-157, 163-164:** Implemented first and second derivative action rate penalties
+```python
+# Lines 58-64: Action history buffer
+self.last_actions = torch.zeros(self.num_envs, gym.spaces.flatdim(self.single_action_space), 3,
+                                dtype=torch.float, device=self.device, requires_grad=False)
+
+# Lines 183-187: Action rate penalties (first and second derivatives)
+rew_action_rate = torch.sum(torch.square(self._actions - self.last_actions[:, :, 0]), dim=1) * (self.cfg.action_scale ** 2)
+rew_action_rate += torch.sum(torch.square(self._actions - 2 * self.last_actions[:, :, 0] + self.last_actions[:, :, 1]), dim=1) * (self.cfg.action_scale ** 2)
+```
+
+**File:** `rob6323_go2_env_cfg.py`
+```python
+# Line 100
+action_rate_reward_scale = -0.1
+```
 - **Purpose:** Penalize jerky motions to encourage smooth actuator commands
-- **Config:** `action_rate_reward_scale = -0.1`
 
 ### Part 2: Low-Level PD Controller
 **File:** `rob6323_go2_env.py`
-- **Lines 38-42:** Added PD control parameters (Kp, Kd, torque_limits)
-- **Lines 97-103:** Updated `_pre_physics_step()` to compute desired joint positions
-- **Lines 105-120:** Implemented manual torque-level PD control in `_apply_action()`
-- **Purpose:** Full control over gains and torque limits instead of using implicit controller
+```python
+# Lines 38-42: PD control parameters
+self.Kp = self.cfg.Kp
+self.Kd = self.cfg.Kd
+self.torque_limits = self.cfg.torque_limits
+
+# Lines 105-120: Manual PD control in _apply_action()
+torques = torch.clamp(
+    self.Kp * (
+        self.desired_joint_pos
+        - self.robot.data.joint_pos
+    )
+    - self.Kd * self.robot.data.joint_vel,
+    -self.torque_limits,
+    self.torque_limits,
+)
+self.robot.set_joint_effort_target(torques)
+```
 
 **File:** `rob6323_go2_env_cfg.py`
-- **Lines 19, 36-39:** Added PD gains (Kp=20.0, Kd=0.5, torque_limits=100.0)
-- **Lines 70-76:** Disabled implicit actuator (stiffness=0, damping=0)
+```python
+# Lines 36-39: PD gains
+Kp = 20.0
+Kd = 0.5
+torque_limits = 100.0
+
+# Lines 70-76: Disable implicit actuator
+robot_cfg.actuators["base_legs"] = ImplicitActuatorCfg(
+    joint_names_expr=[".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"],
+    effort_limit=23.5,
+    velocity_limit=30.0,
+    stiffness=0.0,  # Disabled
+    damping=0.0,    # Disabled
+)
+```
+- **Purpose:** Full control over gains and torque limits instead of using implicit controller
 
 ### Part 3: Early Termination (Base Height Min)
 **File:** `rob6323_go2_env.py`
-- **Lines 183-186:** Added base height check in `_get_dones()`
+```python
+# Lines 254-256: Base height check in _get_dones()
+base_height = self.robot.data.root_pos_w[:, 2]
+cstr_base_height = base_height < self.cfg.base_height_min
+terminated = cstr_termination_contacts | cstr_upsidedown | cstr_base_height
+```
+
+**File:** `rob6323_go2_env_cfg.py`
+```python
+# Line 108
+base_height_min = 0.05
+```
 - **Purpose:** Terminate episodes early if robot collapses (base < 5cm)
-- **Already configured:** `base_height_min = 0.05` in cfg
 
 ### Part 4: Raibert Heuristic (Gait Shaping)
 **File:** `rob6323_go2_env_cfg.py`
-- **Line 29:** Updated observation space from 48 to 52 (added 4 clock inputs)
-- **Lines 32-34:** Added reward scales for Raibert, feet clearance, contact tracking
+```python
+# Line 29
+observation_space = 52  # 48 base + 4 clock inputs
+
+# Lines 32-34
+raibert_heuristic_reward_scale = -1.0
+feet_clearance_reward_scale = -30.0
+tracking_contacts_shaped_force_reward_scale = 0.4
+```
 
 **File:** `rob6323_go2_env.py`
-- **Lines 67-77:** Added foot body indices (`_feet_ids`) for all 4 feet
-- **Lines 83-88:** Added gait state variables (gait_indices, clock_inputs, desired_contact_states)
-- **Lines 135:** Added clock inputs to observations
-- **Lines 159-160:** Call gait update and Raibert reward calculation
-- **Lines 277-283:** Added `foot_positions_w` property
-- **Lines 284-340:** Implemented `_step_contact_targets()` for gait phase tracking
-- **Lines 344-377:** Implemented `_reward_raibert_heuristic()` for foot placement guidance
+```python
+# Lines 83-88: Gait state variables
+self.gait_indices = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+self.clock_inputs = torch.zeros(self.num_envs, 4, dtype=torch.float, device=self.device)
+self.desired_contact_states = torch.zeros(self.num_envs, 4, dtype=torch.float, device=self.device)
+
+# Line 189-190: Update gait and compute Raibert reward
+self._step_contact_targets()
+rew_raibert_heuristic = self._reward_raibert_heuristic()
+
+# Lines 436-469: Raibert heuristic implementation (foot placement guidance)
+def _reward_raibert_heuristic(self):
+    # Convert footsteps to body frame
+    cur_footsteps_translated = self.foot_positions_w - self.robot.data.root_pos_w.unsqueeze(1)
+    # ... (calculates desired foot positions based on velocity commands)
+    err_raibert_heuristic = torch.abs(desired_footsteps_body_frame - footsteps_in_body_frame[:, :, 0:2])
+    reward = torch.sum(torch.square(err_raibert_heuristic), dim=(1, 2))
+    return reward
+```
 - **Purpose:** Use Raibert heuristic as "teacher" to encourage proper stepping patterns
 
 ### Part 5: Refined Reward Function
 
 #### Part 5.1: Configuration
 **File:** `rob6323_go2_env_cfg.py`
-- **Lines 101-105:** Added reward scales for orientation, lin_vel_z, dof_vel, ang_vel_xy
+```python
+# Lines 102-105
+orient_reward_scale = -5.0
+lin_vel_z_reward_scale = -0.02
+dof_vel_reward_scale = -0.0001
+ang_vel_xy_reward_scale = -0.001
+```
 
 #### Part 5.2: Implementation
 **File:** `rob6323_go2_env.py`
-- **Lines 55-58:** Added logging keys: "orient", "lin_vel_z", "dof_vel", "ang_vel_xy"
-- **Lines 167-176:** Implemented 4 stability reward terms:
-  - `rew_orient`: Penalize body tilt (projected gravity XY)
-  - `rew_lin_vel_z`: Penalize vertical bouncing
-  - `rew_dof_vel`: Penalize fast joint velocities
-  - `rew_ang_vel_xy`: Penalize roll/pitch rates
-- **Lines 183-186:** Integrated into rewards dictionary
+```python
+# Lines 196-206: 4 stability reward terms
+rew_orient = torch.sum(torch.square(self.robot.data.projected_gravity_b[:, :2]), dim=1)
+rew_lin_vel_z = torch.square(self.robot.data.root_lin_vel_b[:, 2])
+rew_dof_vel = torch.sum(torch.square(self.robot.data.joint_vel), dim=1)
+rew_ang_vel_xy = torch.sum(torch.square(self.robot.data.root_ang_vel_b[:, :2]), dim=1)
+
+# Lines 234-237: Integrated into rewards dictionary
+"orient": rew_orient * self.cfg.orient_reward_scale,
+"lin_vel_z": rew_lin_vel_z * self.cfg.lin_vel_z_reward_scale,
+"dof_vel": rew_dof_vel * self.cfg.dof_vel_reward_scale,
+"ang_vel_xy": rew_ang_vel_xy * self.cfg.ang_vel_xy_reward_scale,
+```
 - **Purpose:** Shape natural, stable locomotion behavior
 
 ### Part 6: Advanced Foot Interaction
 
-#### Part 6.1: Configuration
-**Already present in cfg (lines 32-34):**
-- `feet_clearance_reward_scale = -30.0`
-- `tracking_contacts_shaped_force_reward_scale = 4.0`
-
-#### Part 6.2: Sensor Indices
 **File:** `rob6323_go2_env.py`
-- **Lines 68-83:** Separated foot indices for robot (positions) vs sensor (forces)
-  - `_feet_ids`: For accessing `robot.data.body_pos_w`
-  - `_feet_ids_sensor`: For accessing `_contact_sensor.data.net_forces_w`
-- **Purpose:** Contact sensor has different internal indexing than robot articulation
+```python
+# Lines 208-213: Foot clearance reward
+phases = 1 - torch.abs(1.0 - torch.clip((self.foot_indices * 2.0) - 1.0, 0.0, 1.0) * 2.0)
+foot_height = self.foot_positions_w[:, :, 2]
+target_height = 0.08 * phases + 0.02
+rew_foot_clearance = torch.square(target_height - foot_height) * (1 - self.desired_contact_states)
+rew_feet_clearance = torch.sum(rew_foot_clearance, dim=1)
 
-#### Part 6.3: Foot Rewards Implementation
-**File:** `rob6323_go2_env.py`
-- **Lines 59-60:** Added logging keys: "feet_clearance", "tracking_contacts_shaped_force"
-- **Lines 178-183:** Implemented foot clearance reward
-  - Calculates dynamic target height (8cm max + 2cm offset) based on gait phase
-  - Penalizes deviation only during swing phase
-- **Lines 185-192:** Implemented contact force tracking reward
-  - Penalizes ground contact forces during swing using exponential decay
-  - Uses proper sensor indices for force data
-- **Lines 203-204:** Integrated into rewards dictionary
-- **Purpose:** Encourage proper foot lifting during swing and grounding during stance
+# Lines 216-223: Contact force tracking reward
+foot_forces = torch.norm(self._contact_sensor.data.net_forces_w[:, self._feet_ids_sensor, :], dim=-1)
+rew_tracking_contacts_shaped_force = torch.zeros(self.num_envs, device=self.device)
+for i in range(4):
+    rew_tracking_contacts_shaped_force += -(1 - self.desired_contact_states[:, i]) * (
+        1 - torch.exp(-1 * foot_forces[:, i] ** 2 / 100.0)
+    )
+rew_tracking_contacts_shaped_force = rew_tracking_contacts_shaped_force / 4
+```
+
+**File:** `rob6323_go2_env_cfg.py`
+```python
+# Lines 33-34
+feet_clearance_reward_scale = -30.0
+tracking_contacts_shaped_force_reward_scale = 0.4
+```
+- **Purpose:** Encourage proper foot lifting during swing and light contact during stance
 
 ---
 
 ## Debugging Fixes
 
 ### Fix 1: Missing numpy import (Job 134821, 134834)
-**Error:** `NameError: name 'np' is not defined` at line 365
+**Error:** `NameError: name 'np' is not defined` at line 399
+
 **File:** `rob6323_go2_env.py`
-**Fix:** Added `import numpy as np` at line 11
-**Context:** Raibert heuristic used `np.pi` for clock input calculation
+```python
+# Line 11: Added missing import
+import numpy as np
+
+# Line 399: Usage in clock input calculation
+self.clock_inputs[:, 0] = torch.sin(2 * np.pi * foot_indices[0])
+```
 
 ### Fix 2: Tensor shape mismatch (Job 134834, 134838)
 **Error:** `RuntimeError: stack expects each tensor to be equal size, but got [4096] at entry 0 and [4096, 1] at entry 10`
+
 **File:** `rob6323_go2_env.py`
-**Fix:** Added `.squeeze()` to line 215 in collision penalty calculation
-**Context:** `torch.max(..., dim=1)[0]` returned shape `[4096, 1]` instead of `[4096]`, causing mismatch when stacking rewards
+```python
+# Line 227: Added .squeeze() to fix shape
+base_contact_force_magnitude = torch.max(torch.norm(net_contact_forces[:, :, self._base_id], dim=-1), dim=1)[0].squeeze()
+```
+**Context:** `torch.max(..., dim=1)[0]` returned `[4096, 1]` instead of `[4096]`
 
 ---
 
@@ -131,7 +231,7 @@ This file tracks all modifications made to the baseline repository for the Go2 q
 - `rob6323_go2_env.py` - Environment logic and reward calculations
 - `rob6323_go2_env_cfg.py` - Configuration parameters and reward scales
 
-**Total Reward Terms:** 12
+**Total Reward Terms:** 13
 1. Linear velocity tracking (XY)
 2. Angular velocity tracking (Yaw)
 3. Action rate penalties (smoothness)
@@ -142,6 +242,8 @@ This file tracks all modifications made to the baseline repository for the Go2 q
 8. Angular velocity XY (roll/pitch)
 9. Feet clearance (swing height)
 10. Contact force tracking (stance grounding)
+11. Base collision penalty
+12. Foot slip (horizontal foot velocity during stance)
 
 ---
 
@@ -172,7 +274,14 @@ This file tracks all modifications made to the baseline repository for the Go2 q
 **Status:** ✅ Completed
 **Duration:** ~500 iterations
 
+**Command:**
+```bash
+./train.sh
+# Executes: python scripts/rsl_rl/train.py --task=Template-Rob6323-Go2-Direct-v0 --headless
+```
+
 **Configuration:**
+- **Seed:** 42
 - **Environment:** Baseline configuration (before tutorial implementation)
 - **Observation Space:** 48 (no clock inputs yet)
 - **Action Space:** 12
@@ -215,7 +324,14 @@ This file tracks all modifications made to the baseline repository for the Go2 q
 **Status:** ❌ Failed (Reward Imbalance)
 **Duration:** 500 iterations
 
+**Command:**
+```bash
+./train.sh
+# Executes: python scripts/rsl_rl/train.py --task=Template-Rob6323-Go2-Direct-v0 --headless
+```
+
 **Configuration:**
+- **Seed:** 42
 - **Environment:** Full tutorial implementation (Parts 1-6) + collision penalties
 - **Observation Space:** 52 (added 4 clock inputs for gait)
 - **Action Space:** 12
@@ -275,7 +391,16 @@ This file tracks all modifications made to the baseline repository for the Go2 q
 **Status:** ❌ Failed (Insufficient Rebalancing)
 **Duration:** 500 iterations
 
+**Command:**
+```bash
+./train.sh
+# Executes: python scripts/rsl_rl/train.py --task=Template-Rob6323-Go2-Direct-v0 --headless
+```
+
 **Objective:** Fix reward imbalance from Run_02 by reducing the 2 largest penalty scales
+
+**Configuration:**
+- **Seed:** 42
 
 **Changes from Run_02:**
 - **File:** `rob6323_go2_env_cfg.py`
@@ -308,24 +433,85 @@ This file tracks all modifications made to the baseline repository for the Go2 q
 
 ---
 
-### Run_04: Boosted Tracking Rewards (Job ID: TBD)
-**Date:** TBD
-**Status:** 🔄 Preparing
+### Run_04: Boosted Tracking Rewards (Job ID: 134935)
+**Date:** 2025-12-18
+**Status:** 🔄 Running
 **Expected Duration:** ~30 minutes
+
+**Command:**
+```bash
+./train.sh
+# Executes: python scripts/rsl_rl/train.py --task=Template-Rob6323-Go2-Direct-v0 --headless
+```
 
 **Objective:** Fix reward imbalance by boosting tracking rewards instead of further reducing penalties
 
 **Strategy:** Provide stronger positive gradient toward velocity tracking
 
+**Configuration:**
+- **Seed:** 42
+
 **Changes from Run_03:**
-- **File:** `rob6323_go2_env_cfg.py`
-  - Line 98: `lin_vel_reward_scale = 3.0` (was 1.0, 3x boost)
-  - Line 99: `yaw_rate_reward_scale = 1.5` (was 0.5, 3x boost)
+
+**File:** `rob6323_go2_env_cfg.py`
+```python
+# Line 98-99: Boosted tracking rewards
+lin_vel_reward_scale = 3.0  # was 1.0
+yaw_rate_reward_scale = 1.5  # was 0.5
+
+# Line 106: Added foot slip penalty
+foot_slip_reward_scale = -0.1
+```
+
+**File:** `rob6323_go2_env.py`
+```python
+# Lines 65-75: Added performance metrics tracking
+self._episode_metrics = {
+    key: torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+    for key in [
+        "lin_vel_error",
+        "ang_vel_error",
+        "base_orient_error",
+        "torque_squared",
+    ]
+}
+self._episode_steps = torch.zeros(self.num_envs, dtype=torch.int, device=self.device)
+
+# Lines 230-232: Foot slip penalty
+foot_velocities = self.robot.data.body_vel_w[:, self._feet_ids, :2]
+rew_foot_slip = torch.sum(torch.norm(foot_velocities, dim=-1) * self.desired_contact_states, dim=1)
+
+# Lines 247-253: Accumulate metrics per step
+self._episode_metrics["lin_vel_error"] += torch.sqrt(lin_vel_error)
+self._episode_metrics["ang_vel_error"] += torch.sqrt(yaw_rate_error)
+self._episode_metrics["base_orient_error"] += torch.acos(torch.clamp(self.robot.data.projected_gravity_b[:, 2], -1.0, 1.0))
+torque_squared = torch.sum(torch.square(self.robot.data.applied_torque), dim=1)
+self._episode_metrics["torque_squared"] += torque_squared
+self._episode_steps += 1
+
+# Lines 301-310: Log metrics to TensorBoard
+extras = dict()
+episode_steps = self._episode_steps[env_ids].float()
+for key in self._episode_metrics.keys():
+    episodic_metric_avg = torch.mean(self._episode_metrics[key][env_ids] / episode_steps)
+    extras["Metrics/" + key] = episodic_metric_avg.item()
+    self._episode_metrics[key][env_ids] = 0.0
+extras["Metrics/episode_length"] = torch.mean(episode_steps).item()
+self._episode_steps[env_ids] = 0
+self.extras["log"].update(extras)
+```
 
 **Unchanged from Run_03:**
 - All penalty scales (Raibert: -1.0, contact_force: 0.4, clearance: -30.0, etc.)
 - All posture stability penalties
 - PD controller, observation space, termination criteria
+
+**New Metrics (TensorBoard):**
+- `Metrics/lin_vel_error` - L2 velocity tracking error (m/s)
+- `Metrics/ang_vel_error` - Angular velocity tracking error (rad/s)
+- `Metrics/base_orient_error` - Orientation deviation from upright (rad)
+- `Metrics/torque_squared` - Energy proxy (Nm²)
+- `Metrics/episode_length` - Steps survived before termination
 
 **Expected Impact:**
 - New positive reward potential: ~4.5 (was ~1.5)
@@ -333,3 +519,4 @@ This file tracks all modifications made to the baseline repository for the Go2 q
 - Penalties remain meaningful but don't dominate
 - Robot should pursue locomotion while experiencing smoothness penalties
 - Motion should be functional + smoother than Run_01 baseline
+- New metrics provide quantitative benchmarks for comparing smoothness and efficiency
