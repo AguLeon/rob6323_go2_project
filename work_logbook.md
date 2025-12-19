@@ -714,3 +714,100 @@ base_height_min = 0.2  # was 0.05
 - Stricter threshold forces robot to learn better posture
 - Tests whether termination criteria can act as implicit reward shaping
 - Compares to Run_05 to isolate effect of termination threshold alone
+
+---
+
+### Run_05 (Retry): Reduced Contact Force Penalty (Job ID: 135007)
+**Date:** 2025-12-18
+**Status:** 🔄 Running
+**Duration:** ~30 minutes
+**Objective:** Push mean reward positive by reducing contact force penalty bottleneck identified in Run_04
+
+**Note:** This is a retry of the failed Run_05 (Job ID: 134990) with the FileNotFoundError fix applied.
+
+**Strategy:** Reduce largest remaining penalty (tracking_contacts_shaped_force) by 2x
+
+**Configuration:**
+- **Seed:** 42
+
+**Changes from Run_04:**
+
+**File:** `rob6323_go2_env_cfg.py`
+```python
+# Line 34: Reduce contact force penalty
+tracking_contacts_shaped_force_reward_scale = 0.2  # was 0.4
+```
+
+**Unchanged from Run_04:**
+- All tracking rewards (lin_vel: 3.0, yaw: 1.5)
+- All other penalties (Raibert: -1.0, clearance: -30.0, action_rate: -0.1, etc.)
+- PD controller, observation space, termination criteria (base_height_min: 0.05)
+
+**Expected Impact:**
+- Contact force penalty reduced from -1.517 to ~-0.76
+- Net positive potential: ~4.5 tracking vs ~3.5 total penalties
+- Expected mean reward: +10 to +20 range (positive territory)
+- Maintains soft landing encouragement but less aggressively
+- Should preserve Run_04's crash-free performance while improving overall reward
+
+**Rationale:**
+- Run_04 confirmed feet_clearance (-0.201) doesn't need reduction
+- Contact force is isolated bottleneck at -1.517
+- All other penalties < 1.0
+- 2x reduction aligns contact penalty with other regularization terms
+- Conservative change maintains tutorial structure
+
+---
+
+### Run_06 (Retry): Reduced Action Rate + Feet Clearance Penalties (Job ID: 135012)
+**Date:** 2025-12-18
+**Status:** 🔄 Running
+**Duration:** ~30 minutes
+**Objective:** Test combined penalty reduction on action smoothness and feet clearance
+
+**Note:** This is a retry of the failed Run_06 (Job ID: 134996) with the FileNotFoundError fix applied.
+
+**Strategy:** Reduce both action_rate and feet_clearance penalties by 2x
+
+**Configuration:**
+- **Seed:** 42
+
+**Changes from Run_04:**
+
+**File:** `rob6323_go2_env_cfg.py`
+```python
+# Line 33: Reduce feet clearance penalty
+feet_clearance_reward_scale = -15.0  # was -30.0
+
+# Line 100: Reduce action rate penalty
+action_rate_reward_scale = -0.05  # was -0.1
+```
+
+**Unchanged from Run_04:**
+- All tracking rewards (lin_vel: 3.0, yaw: 1.5)
+- Other gait penalties (Raibert: -1.0, contact_force: 0.4)
+- All posture penalties (orient, lin_vel_z, dof_vel, ang_vel_xy)
+- PD controller, observation space, termination criteria (base_height_min: 0.05)
+
+**Expected Impact:**
+- Action rate penalty reduced from -0.906 to ~-0.45
+- Feet clearance penalty reduced from -0.201 to ~-0.10
+- Total penalties: ~2.95/step (vs Run_04: ~3.6/step)
+- Net positive potential: ~4.5 tracking vs ~2.95 penalties
+- Expected mean reward: Better than Run_04, potentially positive
+- May allow more aggressive actions and natural foot lifting
+- Risk: Potential increase in action jerkiness or excessive foot height
+
+**Rationale:**
+- Tests combined reduction of #2 and #4 penalty contributors from Run_04
+- Action_rate (-0.906) + feet_clearance (-0.201) = -1.107 total reduction potential
+- Run_04 showed feet_clearance was small but still present
+- Combined test explores whether both constraints were over-tuned
+- More aggressive than Run_05 (single parameter) but maintains all tutorial components
+
+**Comparison to Run_05:**
+- Run_05: Reduces contact_force only (largest penalty: -1.517 → ~-0.76)
+- Run_06: Reduces action_rate + feet_clearance (combined: -1.107 → ~-0.55)
+- Run_05 targets single largest bottleneck
+- Run_06 targets two smaller bottlenecks simultaneously
+- Results will reveal whether single large penalty or multiple small penalties are more critical
