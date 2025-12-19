@@ -20,6 +20,46 @@ from isaaclab.markers.config import BLUE_ARROW_X_MARKER_CFG, FRAME_MARKER_CFG, G
 from isaaclab.actuators import ImplicitActuatorCfg
 
 @configclass
+class Rob6323Go2EventCfgStage1:
+    """Domain randomization events (Stage 1).
+
+    Narrow friction ranges to make DR learnable without collapsing performance.
+    """
+
+    robot_physics_material = EventTermCfg(
+        func=mdp.randomize_rigid_body_material,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
+            "static_friction_range": (0.8, 1.2),
+            "dynamic_friction_range": (0.8, 1.2),
+            "restitution_range": (0.0, 0.05),
+            "num_buckets": 100,
+        },
+    )
+
+
+@configclass
+class Rob6323Go2EventCfgStage2:
+    """Domain randomization events (Stage 2).
+
+    Wider friction ranges to improve robustness after Stage 1 is stable.
+    """
+
+    robot_physics_material = EventTermCfg(
+        func=mdp.randomize_rigid_body_material,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
+            "static_friction_range": (0.5, 1.25),
+            "dynamic_friction_range": (0.5, 1.25),
+            "restitution_range": (0.0, 0.1),
+            "num_buckets": 250,
+        },
+    )
+
+
+@configclass
 class Rob6323Go2EnvCfg(DirectRLEnvCfg):
     # env
     decimation = 4
@@ -29,6 +69,17 @@ class Rob6323Go2EnvCfg(DirectRLEnvCfg):
     action_space = 12
     observation_space = 52  # 48 base + 4 clock inputs
     state_space = 0
+
+    # command sampling ranges (used in Rob6323Go2Env._reset_idx)
+    command_lin_vel_x_range = (-1.0, 1.0)
+    command_lin_vel_y_range = (-1.0, 1.0)
+    command_yaw_rate_range = (-1.0, 1.0)
+
+    # When DR events are enabled, optionally use narrower command ranges (matches reference implementation).
+    use_dr_command_ranges = True
+    command_lin_vel_x_range_dr = (-0.6, 0.6)
+    command_lin_vel_y_range_dr = (-0.6, 0.6)
+    command_yaw_rate_range_dr = (-1.0, 1.0)
     debug_vis = True
     raibert_heuristic_reward_scale = -1.0
     feet_clearance_reward_scale = -30.0
@@ -96,8 +147,8 @@ class Rob6323Go2EnvCfg(DirectRLEnvCfg):
     current_vel_visualizer_cfg.markers["arrow"].scale = (0.5, 0.5, 0.5)
 
     # reward scales
-    lin_vel_reward_scale = 16.0
-    yaw_rate_reward_scale = 8.0
+    lin_vel_reward_scale = 3.0
+    yaw_rate_reward_scale = 1.5
     action_rate_reward_scale = -0.1
 
     # Additional reward scales
@@ -111,6 +162,7 @@ class Rob6323Go2EnvCfg(DirectRLEnvCfg):
     base_height_min = 0.05
 
     # collision penalty
-    base_collision_penalty_scale = -6.0
+    base_collision_penalty_scale = -1.0
 
-    # events - disabled for Run_12
+    # events (Run_11b): Stage 1 enabled by default; switch to `Rob6323Go2EventCfgStage2()` once stable.
+    events: Rob6323Go2EventCfgStage1 | Rob6323Go2EventCfgStage2 | None = Rob6323Go2EventCfgStage1()

@@ -320,7 +320,20 @@ class Rob6323Go2Env(DirectRLEnv):
         self._actions[env_ids] = 0.0
         self._previous_actions[env_ids] = 0.0
         # Sample new commands
-        self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]).uniform_(-1.0, 1.0)
+        use_dr_ranges = self.cfg.use_dr_command_ranges and (self.cfg.events is not None)
+        if use_dr_ranges:
+            lin_x_range = self.cfg.command_lin_vel_x_range_dr
+            lin_y_range = self.cfg.command_lin_vel_y_range_dr
+            yaw_range = self.cfg.command_yaw_rate_range_dr
+        else:
+            lin_x_range = self.cfg.command_lin_vel_x_range
+            lin_y_range = self.cfg.command_lin_vel_y_range
+            yaw_range = self.cfg.command_yaw_rate_range
+
+        num_ids = len(env_ids)
+        self._commands[env_ids, 0] = torch.empty(num_ids, device=self.device).uniform_(lin_x_range[0], lin_x_range[1])
+        self._commands[env_ids, 1] = torch.empty(num_ids, device=self.device).uniform_(lin_y_range[0], lin_y_range[1])
+        self._commands[env_ids, 2] = torch.empty(num_ids, device=self.device).uniform_(yaw_range[0], yaw_range[1])
         # Reset robot state
         joint_pos = self.robot.data.default_joint_pos[env_ids]
         joint_vel = self.robot.data.default_joint_vel[env_ids]

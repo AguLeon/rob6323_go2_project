@@ -924,8 +924,8 @@ yaw_rate_reward_scale = 1.5  # was 8.0 from Run_10
 - Friction randomization likely too aggressive for current reward balance; retuning needed before adding more randomization
 
 **Revised Run_11 Plan (Next):**
-- Run_11b: Friction DR (staged) - Resume from a strong non-DR checkpoint (e.g., Run_06), start with a narrow friction range (e.g., 0.8-1.2), then widen to (0.5-1.25); reduce commanded linear velocity ranges to about +/-0.6 m/s.
-- Run_11c: Friction + mass DR - Once Run_11b is stable, add base-mass randomization (e.g., -1 to +3 kg) and continue training from the Run_11b checkpoint.
+- Run_11b: Friction DR (stage 1) - Train from scratch; start with a narrow friction range (e.g., 0.8-1.2) and reduce commanded linear velocity ranges to about +/-0.6 m/s.
+- Run_11c: Friction + mass DR (stage 2) - Train from scratch; widen friction to (0.5-1.25) and add base-mass randomization (e.g., -1 to +3 kg), while keeping reduced command ranges.
 - Optional follow-up: Only after Run_11c works, consider actuator gain randomization and/or random pushes.
 
 **Validation Checklist:**

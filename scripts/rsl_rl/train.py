@@ -8,12 +8,20 @@
 """Launch Isaac Sim Simulator first."""
 
 import argparse
+import os
+import shlex
 import sys
 
 from isaaclab.app import AppLauncher
 
 # local imports
 import cli_args  # isort: skip
+
+# Allow passing args through Slurm wrapper without editing `train.slurm`.
+# `train.slurm` exports all user args into `ISAAC_ARGS`, so we append them here before parsing.
+extra_args = os.environ.get("ISAAC_ARGS")
+if extra_args:
+    sys.argv.extend(shlex.split(extra_args))
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
