@@ -10,9 +10,11 @@
 
 ## Project Overview
 
-This report documents our work developing a locomotion policy for the Unitree Go2 quadruped robot using reinforcement learning. We started with the Isaac Lab tutorial baseline and experimented with reward tuning, penalty balancing, and domain randomization. The goal is to eventually transfer the trained policy to the physical robot.
+This report documents our work developing a locomotion policy for the Unitree Go2 quadruped robot using reinforcement learning. We started with the Isaac Lab tutorial baseline and experimented with reward tuning, penalty balancing, domain randomization, and joint friction modeling. The goal is to eventually transfer the trained policy to the physical robot.
 
-## Initial Implementation: Following the Tutorial
+---
+
+## Part 1: Following the Tutorial
 
 We started by implementing the Isaac Lab quadruped locomotion tutorial. Key components:
 
@@ -36,9 +38,13 @@ We started by implementing the Isaac Lab quadruped locomotion tutorial. Key comp
 
 The baseline configuration used conservative reward scales (lin_vel=1.0, yaw=0.5) with standard penalty values for action smoothness (-0.1), contact force shaping (0.4), and feet clearance (-30.0).
 
-## Baseline Optimization: Runs 01-04
+**Run_01** was the tutorial baseline. Training on 4096 parallel environments for 500 iterations gave mean reward of -18.86 and linear velocity of 0.983 m/s. The robot walked upright with no crashes, but the negative mean reward showed penalties dominated the signal.
 
-**Run_01** was the tutorial baseline with default reward scales. Training on 4096 parallel environments for 500 iterations gave mean reward of -18.86 and linear velocity of 0.983 m/s. The robot walked upright with no crashes, but the negative mean reward showed penalties dominated the signal.
+---
+
+## Part 2: Experiments and Locomotion Improvement
+
+### Baseline Optimization: Runs 02-04
 
 **Run_02** tested whether increasing tracking rewards would improve velocity. We increased linear velocity reward by 50% (1.0→1.5) and yaw rate proportionally (0.5→0.75). Mean reward improved to -16.73, linear velocity increased to 1.231 m/s, and the robot still didn't crash. This worked better than trying to reduce penalties.
 
@@ -46,7 +52,7 @@ The baseline configuration used conservative reward scales (lin_vel=1.0, yaw=0.5
 
 **Run_04** tripled the baseline tracking rewards (lin_vel=3.0, yaw=1.5). Linear velocity reached 2.701 m/s (nearly 3x baseline) and mean reward improved to -11.28. Episode length stayed at maximum (999 steps). Looking at penalties: contact force shaping was largest at -1.517, then action rate (-0.906), Raibert heuristic (-0.262), and feet clearance (-0.201). This became our baseline for later experiments.
 
-## Penalty Exploration: Runs 05-09
+### Penalty Exploration: Runs 05-09
 
 After Run_04, we tried reducing penalties to get the mean reward positive while keeping locomotion quality.
 
@@ -60,7 +66,7 @@ After Run_04, we tried reducing penalties to get the mean reward positive while 
 
 **Run_09** tested just reducing action rate penalty to -0.05 with Run_04's tracking rewards (3.0/1.5). Linear velocity matched Run_04 at 2.69 m/s, confirming action rate penalty wasn't the issue. Run_04's setup was still best for the 3.0/1.5 scale.
 
-## Run 10: Higher Tracking Rewards
+### Higher Tracking Rewards: Run_10
 
 The instructor mentioned good performance should reach `track_lin_vel_xy_exp` around 48. Run_04 got 2.701, way below that. So we tried much higher tracking rewards.
 
@@ -68,7 +74,7 @@ The instructor mentioned good performance should reach `track_lin_vel_xy_exp` ar
 
 However, watching the training revealed robot-to-robot collisions (4096 environments spaced 4.0m apart). The collision metric (`base_contact`) showed 0.000 despite visible collisions. Looking at the code: the metric only tracks forces on the robot's torso: `base_contact_force_magnitude = torch.norm(net_contact_forces[:, :, self._base_id])`. Leg-to-robot or foot-to-robot collisions between neighboring environments aren't captured. So the metric measures torso-ground contact for termination, not robot-robot interference during training.
 
-## Domain Randomization: Runs 11a-11b
+### Domain Randomization: Runs 11a-11b
 
 Run_10 performed well in simulation, but the real robot will face different surfaces (carpet vs. concrete), payload changes, actuator wear, and bumps. Domain randomization trains on varied physics parameters to handle this.
 
@@ -81,59 +87,78 @@ Run_10 performed well in simulation, but the real robot will face different surf
 
 This worked much better: track_lin_vel_xy_exp recovered to 2.14 (175% improvement over Run_11a), though still 21% below Run_04's 2.70. Mean reward was more negative (-30.96 vs. -11.28), probably from foot slip penalties and harder dynamics. But training was stable with no crashes.
 
-## Joint Friction Model: Run_12
+### Summary of Experimental Runs
 
-**Run_12** (Job ID: 135667, running) adds a joint friction model on top of Run_11b's domain randomization. Real actuators have stiction and viscous damping that the basic PD controller doesn't account for.
+| Run | Base Run | Variable Changes | Values Changed | Job ID |
+|-----|----------|-----------------|----------------|--------|
+| 01 | Tutorial | Baseline | `lin_vel_reward_scale=1.0`<br>`yaw_rate_reward_scale=0.5` | 134852 |
+| 02 | Run_01 | Tracking rewards (+50%) | `lin_vel_reward_scale`: 1.0→**1.5**<br>`yaw_rate_reward_scale`: 0.5→**0.75** | 134868 |
+| 03 | Run_01 | Tracking rewards (+100%) | `lin_vel_reward_scale`: 1.0→**2.0**<br>`yaw_rate_reward_scale`: 0.5→**1.0** | 134881 |
+| 04 | Run_01 | Tracking rewards (+200%) | `lin_vel_reward_scale`: 1.0→**3.0**<br>`yaw_rate_reward_scale`: 0.5→**1.5** | 134916 |
+| 05 | Run_04 | Contact force penalty (-50%) | `tracking_contacts_shaped_force_reward_scale`: 0.4→**0.2** | 135062 |
+| 06 | Run_04 | Action + clearance penalties | `action_rate_reward_scale`: -0.1→**-0.05**<br>`feet_clearance_reward_scale`: -30.0→**-15.0** | 135327 |
+| 07 | Run_05 | Contact force + termination | `tracking_contacts_shaped_force_reward_scale`: 0.4→**0.2**<br>`base_height_min`: 0.05→**0.20** | 135037 |
+| 08 | Run_04 | Tracking rewards (+33%) | `lin_vel_reward_scale`: 3.0→**4.0**<br>`yaw_rate_reward_scale`: 1.5→**2.0** | 135358 |
+| 09 | Run_04 | Action rate penalty (-50%) | `action_rate_reward_scale`: -0.1→**-0.05** | 135367 |
+| 10 | Run_04 | Tracking rewards (+433%) | `lin_vel_reward_scale`: 3.0→**16.0**<br>`yaw_rate_reward_scale`: 1.5→**8.0** | 135378 |
+| 11a | Run_04 | Domain randomization (failed) | Wide friction ranges: (0.5-1.25)<br>Standard command ranges ±1.0 m/s | 135457 |
+| 11b | Run_04 | Friction DR | Narrow friction: (0.8-1.2)<br>Reduced commands: ±0.6 m/s | 135552 |
 
-**Joint Friction Model:**
-The torque applied to each joint subtracts friction from PD control:
+---
+
+## Part 3: Bonus Implementation - Joint Friction
+
+Real actuators have stiction and viscous damping that the basic PD controller doesn't account for. To better match real hardware, we implemented a joint friction model that subtracts friction torques from the PD control signal.
+
+### Joint Friction Model
+
+The torque applied to each joint is modified as:
 ```
 τ = τ_PD - (τ_stiction + τ_viscous)
 τ_stiction = k_stiction · tanh(q̇ / v₀)
 τ_viscous = k_viscous · q̇
 ```
 
+Where:
+- `τ_PD = Kp(q_des - q) - Kd·q̇` is the standard PD control torque
+- `k_stiction` is the stiction coefficient (models static friction at low velocities)
+- `k_viscous` is the viscous damping coefficient (models friction proportional to velocity)
+- `v₀ = 0.1 rad/s` is the velocity scale for the tanh transition
+
+### Implementation Details
+
 Friction coefficients are sampled randomly per environment at reset:
 - k_stiction ∼ U(0.0, 2.5) N·m
 - k_viscous ∼ U(0.0, 0.3) N·m·s
-- v₀ = 0.1 rad/s (stiction velocity scale)
 
-One coefficient per environment applies to all 12 joints, giving different friction across the 4096 parallel environments.
+One coefficient per environment applies to all 12 joints, giving different friction levels across the 4096 parallel environments. This randomization helps the policy become robust to actuator variations.
 
-**Changes from Run_11b:**
-- Tracking rewards increased to Run_10 levels: lin_vel=16.0, yaw=8.0
+The implementation is in `rob6323_go2_env.py`:
+- Lines 45-47: Storage for friction coefficients
+- Lines 154-158: Application in `_apply_action()` method
+- Lines 342-355: Sampling at reset
+
+### Run_12: Testing Joint Friction
+
+**Run_12** (Job ID: 135705, running) combines:
 - Joint friction enabled with randomization
-- Keeps Run_11b's DR (narrow friction + reduced command ranges)
-- Collision penalty stays at -1.0
+- Run_11b's domain randomization (narrow friction ranges 0.8-1.2, reduced command ranges ±0.6 m/s)
+- Run_10's high tracking rewards (lin_vel=16.0, yaw=8.0)
 
-This combines randomization of external dynamics (surface friction) with actuator randomization (joint friction) for better sim-to-real transfer.
+This tests whether we can achieve both high performance (from strong tracking rewards) and robustness (from domain randomization + actuator friction) simultaneously. The combination of external dynamics randomization (surface friction) and actuator randomization (joint friction) should improve sim-to-real transfer.
 
-## Summary of Key Results
+---
 
-| Run | Base Run | Variable Changes | Values Changed | Lin Vel | Job ID |
-|-----|----------|-----------------|----------------|---------|--------|
-| 01 | Tutorial | Baseline | `lin_vel_reward_scale=1.0`<br>`yaw_rate_reward_scale=0.5`<br>`tracking_contacts_shaped_force_reward_scale=0.4`<br>`action_rate_reward_scale=-0.1`<br>`feet_clearance_reward_scale=-30.0`<br>`base_height_min=0.05` | 0.983 | 134852 |
-| 02 | Run_01 | Tracking rewards (+50%) | `lin_vel_reward_scale`: 1.0→**1.5**<br>`yaw_rate_reward_scale`: 0.5→**0.75** | 1.231 | 134868 |
-| 03 | Run_01 | Tracking rewards (+100%) | `lin_vel_reward_scale`: 1.0→**2.0**<br>`yaw_rate_reward_scale`: 0.5→**1.0** | 1.541 | 134881 |
-| 04 | Run_01 | Tracking rewards (+200%) | `lin_vel_reward_scale`: 1.0→**3.0**<br>`yaw_rate_reward_scale`: 0.5→**1.5** | 2.701 | 134916 |
-| 05 | Run_04 | Contact force penalty (-50%) | `tracking_contacts_shaped_force_reward_scale`: 0.4→**0.2** | Failed | 135062 |
-| 06 | Run_04 | Action + clearance penalties | `action_rate_reward_scale`: -0.1→**-0.05**<br>`feet_clearance_reward_scale`: -30.0→**-15.0** | ~2.70 | 135327 |
-| 07 | Run_05 | Contact force + termination | `tracking_contacts_shaped_force_reward_scale`: 0.4→**0.2**<br>`base_height_min`: 0.05→**0.20** | Failed | 135037 |
-| 08 | Run_04 | Tracking rewards (+33%) | `lin_vel_reward_scale`: 3.0→**4.0**<br>`yaw_rate_reward_scale`: 1.5→**2.0** | 1.99 | 135358 |
-| 09 | Run_04 | Action rate penalty (-50%) | `action_rate_reward_scale`: -0.1→**-0.05** | 2.69 | 135367 |
-| 10 | Run_04 | Tracking rewards (+433%) | `lin_vel_reward_scale`: 3.0→**16.0**<br>`yaw_rate_reward_scale`: 1.5→**8.0** | 15.56 | 135378 |
-| 11a | Run_04 | Domain randomization (failed) | Wide friction ranges: (0.5-1.25)<br>Standard command ranges ±1.0 m/s | 0.78 | 135457 |
-| 11b | Run_04 | Friction DR | Narrow friction: (0.8-1.2)<br>Reduced commands: ±0.6 m/s | 2.14 | 135552 |
-| 12 | Run_11b | DR + joint friction + high rewards | Tracking rewards: 16.0/8.0<br>Joint friction: stiction (0.0-2.5), viscous (0.0-0.3)<br>Maintains Run_11b DR | Running | 135667 |
+## Part 4: Final Comments
 
-## Conclusions
+### Key Lessons
 
-We made progress through three phases:
+**Reward Tuning:** Increasing tracking rewards from 1.0 to 16.0 for linear velocity improved performance from 0.98 to 15.56 m/s without crashes. Key lessons: (1) tracking rewards scale well when penalties are balanced correctly, (2) contact force shaping penalty at 0.4 is critical for proper gait and can't be reduced without breaking walking, (3) reward scaling isn't always linear - Run_08 performed worse at 4.0/2.0 than Run_04 at 3.0/1.5.
 
-**Phase 1 - Reward Tuning (Runs 01-10):** Increasing tracking rewards from 1.0 to 16.0 for linear velocity improved performance from 0.98 to 15.56 m/s without crashes. Key lessons: (1) tracking rewards scale well when penalties are balanced correctly, (2) contact force shaping penalty at 0.4 is critical for proper gait and can't be reduced without breaking walking, (3) reward scaling isn't always linear - Run_08 performed worse at 4.0/2.0 than Run_04 at 3.0/1.5.
+**Domain Randomization:** Aggressive randomization from scratch doesn't work (Run_11a failed at 0.78 m/s). A more conservative approach worked better: Run_11b used narrower friction ranges (0.8-1.2) plus reduced command ranges (±0.6 m/s) to get 2.14 m/s with stable training.
 
-**Phase 2 - Domain Randomization (Runs 11a-11b):** We learned that aggressive randomization from scratch doesn't work (Run_11a failed at 0.78 m/s). Run_11b used narrower friction ranges (0.8-1.2) plus reduced command ranges (±0.6 m/s) to get 2.14 m/s with stable training.
+**Joint Friction:** Added stiction and viscous damping to model real actuator friction on top of Run_11b's randomization. Combined with Run_10's higher tracking rewards (16.0/8.0) in Run_12 to test if we can achieve both high performance and robustness.
 
-**Phase 3 - Joint Friction (Run_12):** Added stiction and viscous damping to model real actuator friction on top of Run_11b's randomization. Combined with Run_10's higher tracking rewards (16.0/8.0) to see if we can get both high performance and robustness.
+### Next Steps
 
-The progression from optimizing rewards (Run_10) to domain randomization (Run_11b) to actuator modeling (Run_12) should help with transferring to the real robot, though we won't know until we actually test it.
+The progression from optimizing rewards (Run_10) to domain randomization (Run_11b) to actuator modeling (Run_12) should help with transferring to the real robot, though we won't know until we actually test it. Future work would involve deploying the trained policy on the physical Go2 robot and iterating based on real-world performance.

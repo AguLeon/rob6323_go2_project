@@ -22,7 +22,7 @@ The table below summarizes the main configuration changes explored across runs a
 | 10 | Run_04 | Tracking rewards (+433%) | `lin_vel_reward_scale`: 3.0->**16.0**<br>`yaw_rate_reward_scale`: 1.5->**8.0** | 15.56 | 135378 |
 | 11a | Run_04 | Domain randomization | Added `EventCfg` with:<br>`static_friction_range=(0.5, 1.25)`<br>`dynamic_friction_range=(0.5, 1.25)`<br>`restitution_range=(0.0, 0.1)` | 0.78 | 135457 |
 | 11b | Run_04 | Friction DR (stage 1) | Train from scratch; enable friction randomization with narrow range (e.g., 0.8-1.2) + reduce command ranges to about +/-0.6 m/s | 2.14 | 135552 |
-| 12 | Run_11b | DR + joint friction + high rewards | `lin_vel_reward_scale`: 3.0->**16.0**<br>`yaw_rate_reward_scale`: 1.5->**8.0**<br>Keep collision penalty: `base_collision_penalty_scale=-1.0`<br>Add joint friction: `stiction_range=(0.0, 2.5)`, `viscous_range=(0.0, 0.3)` (1 scalar/env) | Running | 135667 |
+| 12 | Run_11b | DR + joint friction + high rewards | `lin_vel_reward_scale`: 3.0->**16.0**<br>`yaw_rate_reward_scale`: 1.5->**8.0**<br>Keep collision penalty: `base_collision_penalty_scale=-1.0`<br>Add joint friction: `stiction_range=(0.0, 2.5)`, `viscous_range=(0.0, 0.3)` (1 scalar/env) | Running | 135705 |
 
 ## Where the changes live
 
