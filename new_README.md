@@ -1,8 +1,8 @@
-# ROB6323 Go2 Project - Code Modifications (Run_11b selected; includes Run_12 plan)
+# ROB6323 Go2 Project - Code Modifications (Run_12 selected)
 
 This document summarizes the **functional changes** we implemented on top of the starter repository to improve locomotion learning and prepare for domain randomization. It focuses on **new reward/penalty terms and environment functionality**, not on per-run hyperparameter sweeps.
 
-**Selected run:** **Run_11b** (Stage 1 domain randomization with an easier curriculum).
+**Selected run:** **Run_12** (high tracking rewards + Stage 1 surface-friction randomization + joint friction).
 
 ## Run summary table
 
@@ -22,7 +22,7 @@ The table below summarizes the main configuration changes explored across runs a
 | 10 | Run_04 | Tracking rewards (+433%) | `lin_vel_reward_scale`: 3.0->**16.0**<br>`yaw_rate_reward_scale`: 1.5->**8.0** | 15.56 | 135378 |
 | 11a | Run_04 | Domain randomization | Added `EventCfg` with:<br>`static_friction_range=(0.5, 1.25)`<br>`dynamic_friction_range=(0.5, 1.25)`<br>`restitution_range=(0.0, 0.1)` | 0.78 | 135457 |
 | 11b | Run_04 | Friction DR (stage 1) | Train from scratch; enable friction randomization with narrow range (e.g., 0.8-1.2) + reduce command ranges to about +/-0.6 m/s | 2.14 | 135552 |
-| 12 | Run_11b | DR + joint friction + high rewards | `lin_vel_reward_scale`: 3.0->**16.0**<br>`yaw_rate_reward_scale`: 1.5->**8.0**<br>Keep collision penalty: `base_collision_penalty_scale=-1.0`<br>Add joint friction: `stiction_range=(0.0, 2.5)`, `viscous_range=(0.0, 0.3)` (1 scalar/env) | Running | 135705 |
+| 12 | Run_11b | Joint friction + high rewards | Joint friction: stiction `U(0.0, 2.5)`, viscous `U(0.0, 0.3)` (1 scalar/env)<br>High tracking rewards: `lin_vel_reward_scale=16.0`, `yaw_rate_reward_scale=8.0` | 15.77 | 135705 |
 
 ## Where the changes live
 
@@ -31,11 +31,11 @@ The table below summarizes the main configuration changes explored across runs a
 - Gym registration: `source/rob6323_go2/rob6323_go2/tasks/direct/rob6323_go2/__init__.py`
 - Training entry (CLI forwarding utility): `scripts/rsl_rl/train.py`
 
-## Run_11b - Selected parameter values
+## Run_12 - Selected parameter values
 
-These are the key parameters used for **Run_11b** in `Rob6323Go2EnvCfg` (friction DR Stage 1 enabled by default):
+These are the key parameters used for **Run_12** (high rewards + Stage 1 surface friction DR + joint friction):
 
-- **Selected Gym task ID:** `Template-Rob6323-Go2-Direct-v0`
+- **Selected Gym task ID:** `Template-Rob6323-Go2-Direct-Run12-v0`
 - **Simulation / scene**
   - `dt=1/200`, `decimation=4`, `episode_length_s=20.0`
   - `num_envs=4096`, `env_spacing=4.0`
@@ -45,8 +45,8 @@ These are the key parameters used for **Run_11b** in `Rob6323Go2EnvCfg` (frictio
   - `observation_space=52` (includes 4 gait clock inputs)
 - **Controller**
   - `Kp=20.0`, `Kd=0.5`, `torque_limits=100.0`
-- **Tracking rewards (Run_04-level, used for DR stability)**
-  - `lin_vel_reward_scale=3.0`, `yaw_rate_reward_scale=1.5`
+- **Tracking rewards (Run_10-level)**
+  - `lin_vel_reward_scale=16.0`, `yaw_rate_reward_scale=8.0`
 - **Penalties / shaping terms**
   - `action_rate_reward_scale=-0.1`
   - `raibert_heuristic_reward_scale=-1.0`
@@ -70,6 +70,9 @@ These are the key parameters used for **Run_11b** in `Rob6323Go2EnvCfg` (frictio
   - `dynamic_friction_range=(0.8, 1.2)`
   - `restitution_range=(0.0, 0.05)`
   - `num_buckets=100`
+- **Joint friction (enabled)**
+  - `enable_joint_friction=True`, `randomize_joint_friction=True`
+  - `stiction_range=(0.0, 2.5)`, `viscous_range=(0.0, 0.3)`, `stiction_velocity_scale=0.1`
 - **Contact sensor**
   - `history_length=3`, `update_period=0.005`, `track_air_time=True`
 
@@ -147,12 +150,12 @@ Config knobs:
 - `foot_slip_reward_scale`
 - `base_collision_penalty_scale`
 
-## Run_11b - Domain randomization
+## Domain randomization
 
 We implemented domain randomization using Isaac Lab's `EventManager` interface:
 
-- **Run_11b:** randomize rigid-body material properties at reset using narrower friction ranges (0.8-1.2) to avoid performance collapse.
-- **DR-aware command sampling:** when `events` are enabled, reduce commanded linear velocity ranges to ±0.6 m/s (easier curriculum under DR).
+- Randomize rigid-body material properties at reset using narrower friction ranges (0.8-1.2) to avoid performance collapse.
+- When `events` are enabled, reduce commanded linear velocity ranges to ±0.6 m/s (easier curriculum under DR).
 
 ## Part 7 - Joint friction torque model (used in Run_12 plan)
 
@@ -163,12 +166,3 @@ To better match real hardware, we added an optional joint friction model that su
 - `tau_viscous = k_viscous * dq` with `k_viscous ~ U(0.0, 0.3)` sampled per-environment at reset
 
 Config knobs: `enable_joint_friction`, `randomize_joint_friction`, `stiction_range`, `viscous_range`, `stiction_velocity_scale`.
-
-Relevant config:
-- `Rob6323Go2EnvCfg.events` (Run_11b uses friction randomization)
-- `Rob6323Go2EnvCfg.use_dr_command_ranges` and `*_range_dr` values
-- `Rob6323Go2EventCfgStage1` (narrow friction ranges for stable training)
-
-## Training utility (no `train.slurm` edits)
-
-To support selecting different Gym task IDs without editing Slurm scripts, `scripts/rsl_rl/train.py` appends any args provided via the `ISAAC_ARGS` environment variable into `sys.argv` before parsing. This enables `./train.sh --task=...`-style overrides while keeping `train.slurm` untouched.
