@@ -42,6 +42,10 @@ class Rob6323Go2Env(DirectRLEnv):
         self.motor_offsets = torch.zeros(self.num_envs, 12, device=self.device)
         self.torque_limits = cfg.torque_limits
 
+        # Joint friction coefficients (one scalar per env, applied to all joints)
+        self._rand_stiction = torch.zeros(self.num_envs, 1, device=self.device)
+        self._rand_viscous = torch.zeros(self.num_envs, 1, device=self.device)
+
         # X/Y linear velocity and yaw angular velocity commands
         self._commands = torch.zeros(self.num_envs, 3, device=self.device)
 
@@ -144,17 +148,16 @@ class Rob6323Go2Env(DirectRLEnv):
 
     def _apply_action(self) -> None:
         # Compute PD torques
-        torques = torch.clip(
-            (
-                self.Kp * (
-                    self.desired_joint_pos 
-                    - self.robot.data.joint_pos 
-                )
-                - self.Kd * self.robot.data.joint_vel
-            ),
-            -self.torque_limits,
-            self.torque_limits,
-        )
+        pd_torques = self.Kp * (self.desired_joint_pos - self.robot.data.joint_pos) - self.Kd * self.robot.data.joint_vel
+
+        # Optional joint friction model (stiction + viscous)
+        if self.cfg.enable_joint_friction:
+            joint_vel = self.robot.data.joint_vel
+            stiction_torque = self._rand_stiction * torch.tanh(joint_vel / self.cfg.stiction_velocity_scale)
+            viscous_torque = self._rand_viscous * joint_vel
+            pd_torques = pd_torques - (stiction_torque + viscous_torque)
+
+        torques = torch.clip(pd_torques, -self.torque_limits, self.torque_limits)
 
         # Apply torques to the robot
         self.robot.set_joint_effort_target(torques)
@@ -334,6 +337,22 @@ class Rob6323Go2Env(DirectRLEnv):
         self._commands[env_ids, 0] = torch.empty(num_ids, device=self.device).uniform_(lin_x_range[0], lin_x_range[1])
         self._commands[env_ids, 1] = torch.empty(num_ids, device=self.device).uniform_(lin_y_range[0], lin_y_range[1])
         self._commands[env_ids, 2] = torch.empty(num_ids, device=self.device).uniform_(yaw_range[0], yaw_range[1])
+
+        # Sample joint friction coefficients (per env) at reset
+        if self.cfg.enable_joint_friction:
+            if self.cfg.randomize_joint_friction:
+                self._rand_stiction[env_ids] = sample_uniform(
+                    self.cfg.stiction_range[0], self.cfg.stiction_range[1], (num_ids, 1), device=self.device
+                )
+                self._rand_viscous[env_ids] = sample_uniform(
+                    self.cfg.viscous_range[0], self.cfg.viscous_range[1], (num_ids, 1), device=self.device
+                )
+            else:
+                self._rand_stiction[env_ids] = (self.cfg.stiction_range[0] + self.cfg.stiction_range[1]) / 2.0
+                self._rand_viscous[env_ids] = (self.cfg.viscous_range[0] + self.cfg.viscous_range[1]) / 2.0
+        else:
+            self._rand_stiction[env_ids] = 0.0
+            self._rand_viscous[env_ids] = 0.0
         # Reset robot state
         joint_pos = self.robot.data.default_joint_pos[env_ids]
         joint_vel = self.robot.data.default_joint_vel[env_ids]

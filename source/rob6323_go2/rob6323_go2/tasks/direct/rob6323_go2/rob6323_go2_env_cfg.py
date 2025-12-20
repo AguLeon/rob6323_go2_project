@@ -101,6 +101,13 @@ class Rob6323Go2EnvCfg(DirectRLEnvCfg):
     Kd = 0.5   # Derivative gain
     torque_limits = 100.0  # Max torque
 
+    # joint friction model (stiction + viscous)
+    enable_joint_friction = False
+    randomize_joint_friction = True
+    stiction_range = (0.0, 2.5)
+    viscous_range = (0.0, 0.3)
+    stiction_velocity_scale = 0.1
+
     # simulation
     sim: SimulationCfg = SimulationCfg(
         dt=1 / 200,
@@ -184,3 +191,22 @@ class Rob6323Go2EnvCfgRun11c(Rob6323Go2EnvCfg):
     """Run_11c: Stage 2 domain randomization (wider friction + base mass)."""
 
     events: Rob6323Go2EventCfgStage1 | Rob6323Go2EventCfgStage2 | None = Rob6323Go2EventCfgStage2()
+
+
+@configclass
+class Rob6323Go2EnvCfgRun12(Rob6323Go2EnvCfgRun11c):
+    """Run_12: Keep Run_11c DR + add joint friction + scale collision penalty (6x) with Run_10 tracking rewards."""
+
+    # reward scales (use Run_10 tracking rewards)
+    lin_vel_reward_scale = 16.0
+    yaw_rate_reward_scale = 8.0
+
+    # collision penalty (same as Run_10 / default)
+    base_collision_penalty_scale = -1.0
+
+    # joint friction (sample ranges from sample_readme)
+    enable_joint_friction = True
+    randomize_joint_friction = True
+    stiction_range = (0.0, 2.5)
+    viscous_range = (0.0, 0.3)
+    stiction_velocity_scale = 0.1

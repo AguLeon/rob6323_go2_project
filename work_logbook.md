@@ -958,3 +958,21 @@ yaw_rate_reward_scale = 1.5  # was 8.0 from Run_10
 - [ ] Mean reward comparable to Run_04 (-11.28 +/- 20%)
 - [ ] Locomotion quality maintained
 - [x] TensorBoard shows friction randomization applied (check event logs)
+
+---
+
+### Run_12 (Planned): Keep Run_11c DR + Joint Friction + Collision Penalty
+**Base:** Run_11c (Stage 2 DR: wider surface friction + base mass)  
+**Objective:** Add joint friction modeling (stiction + viscous) while also scaling collision penalties under high tracking rewards.
+
+**Planned Changes:**
+- **Tracking rewards (from Run_10):** `lin_vel_reward_scale=16.0`, `yaw_rate_reward_scale=8.0`
+- **Collision penalty (same as Run_10):** `base_collision_penalty_scale=-1.0`
+- **Joint friction torque model (new):**
+  - Stiction: `k_stiction ~ U(0.0, 2.5)` per environment
+  - Viscous: `k_viscous ~ U(0.0, 0.3)` per environment
+  - Applied as `tau = tau_PD - (k_stiction*tanh(dq/v0) + k_viscous*dq)` before torque clamping
+- **DR:** unchanged from Run_11c (surface friction + base mass), with reduced DR command ranges enabled
+
+**Implementation Notes:**
+- Implemented via new Gym task ID: `Template-Rob6323-Go2-Direct-Run12-v0`

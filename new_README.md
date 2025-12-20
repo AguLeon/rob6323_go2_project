@@ -1,4 +1,4 @@
-# ROB6323 Go2 Project - Code Modifications (through Run_11b)
+# ROB6323 Go2 Project - Code Modifications (Run_11b selected; includes Run_12 plan)
 
 This document summarizes the **functional changes** we implemented on top of the starter repository to improve locomotion learning and prepare for domain randomization. It focuses on **new reward/penalty terms and environment functionality**, not on per-run hyperparameter sweeps.
 
@@ -23,7 +23,7 @@ The table below summarizes the main configuration changes explored across runs a
 | 11a | Run_04 | Domain randomization | Added `EventCfg` with:<br>`static_friction_range=(0.5, 1.25)`<br>`dynamic_friction_range=(0.5, 1.25)`<br>`restitution_range=(0.0, 0.1)` | 0.78 | 135457 |
 | 11b | Run_04 | Friction DR (stage 1) | Train from scratch; enable friction randomization with narrow range (e.g., 0.8-1.2) + reduce command ranges to about +/-0.6 m/s | 2.14 | 135552 |
 | 11c | Run_04 | Friction + mass DR (stage 2) | Train from scratch; widen friction to (0.5-1.25) + add base-mass randomization (e.g., -1 to +3 kg) + keep reduced command ranges | Running | 135580 |
-| 12 | Run_10 | Collision penalty (6x) | `base_collision_penalty_scale`: -1.0->**-6.0** | Planned | TBD |
+| 12 | Run_11c | DR + joint friction + collision | `lin_vel_reward_scale`: 3.0->**16.0**<br>`yaw_rate_reward_scale`: 1.5->**8.0**<br>Keep collision penalty: `base_collision_penalty_scale=-1.0`<br>Add joint friction: `stiction_range=(0.0, 2.5)`, `viscous_range=(0.0, 0.3)` (1 scalar/env) | Planned | TBD |
 
 ## Where the changes live
 
@@ -155,6 +155,16 @@ We implemented domain randomization using Isaac Lab's `EventManager` interface:
 - **Stage 1 (Run_11b):** randomize rigid-body material properties at reset using narrower friction ranges to avoid performance collapse.
 - **DR-aware command sampling:** when `events` are enabled, optionally reduce commanded linear velocity ranges (easier curriculum under DR).
 - **Note:** A Stage 2 config (`Rob6323Go2EventCfgStage2`) is included for follow-up experiments, but **Run_11b uses Stage 1**.
+
+## Part 7 - Joint friction torque model (used in Run_12 plan)
+
+To better match real hardware, we added an optional joint friction model that subtracts stiction + viscous torques from the PD torques:
+
+- `tau = tau_PD - (tau_stiction + tau_viscous)`
+- `tau_stiction = k_stiction * tanh(dq / v0)` with `k_stiction ~ U(0.0, 2.5)` sampled per-environment at reset
+- `tau_viscous = k_viscous * dq` with `k_viscous ~ U(0.0, 0.3)` sampled per-environment at reset
+
+Config knobs: `enable_joint_friction`, `randomize_joint_friction`, `stiction_range`, `viscous_range`, `stiction_velocity_scale`.
 
 Relevant config:
 - `Rob6323Go2EnvCfg.events` (Run_11b defaults to Stage 1)
