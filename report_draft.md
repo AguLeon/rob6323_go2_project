@@ -103,6 +103,7 @@ This worked much better: track_lin_vel_xy_exp recovered to 2.14 (175% improvemen
 | 10 | Run_04 | Tracking rewards (+433%) | `lin_vel_reward_scale`: 3.0→**16.0**<br>`yaw_rate_reward_scale`: 1.5→**8.0** | 135378 |
 | 11a | Run_04 | Domain randomization (failed) | Wide friction ranges: (0.5-1.25)<br>Standard command ranges ±1.0 m/s | 135457 |
 | 11b | Run_04 | Friction DR | Narrow friction: (0.8-1.2)<br>Reduced commands: ±0.6 m/s | 135552 |
+| 12 | Run_11b | Joint friction + high rewards | Joint friction: stiction `U(0.0, 2.5)`, viscous `U(0.0, 0.3)` (1 scalar/env)<br>High tracking rewards: `lin_vel_reward_scale=16.0`, `yaw_rate_reward_scale=8.0` | 135705 |
 
 ---
 
@@ -146,6 +147,8 @@ The implementation is in `rob6323_go2_env.py`:
 - Run_10's high tracking rewards (lin_vel=16.0, yaw=8.0)
 
 This tests whether we can achieve both high performance (from strong tracking rewards) and robustness (from domain randomization + actuator friction) simultaneously. The combination of external dynamics randomization (surface friction) and actuator randomization (joint friction) should improve sim-to-real transfer.
+
+In the available TensorBoard logs (final iteration), Run_12 reached mean reward 369.17 with `track_lin_vel_xy_exp=15.77` and `track_ang_vel_z_exp=7.85` (episode length 999). Tracking errors were low (`lin_vel_error=0.045`, `ang_vel_error=0.051`). These results are close to Run_10’s tracking performance, but Run_12 also includes randomized joint friction, so it is a more difficult training setup. This is still a simulation result, so rollout inspection and hardware testing are needed to confirm robustness.
 
 ---
 
