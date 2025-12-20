@@ -1,5 +1,9 @@
 # ROB6323 Go2 Project — Isaac Lab
 
+----
+Note: **Logs for all runs available here:** [Google Drive folder](https://drive.google.com/drive/folders/1iKTXRSzleZ_O_0G2LWdkNHcRCAVvaGXI?usp=sharing)
+----
+
 This repository is the starter code for the NYU Reinforcement Learning and Optimal Control project in which students train a Unitree Go2 walking policy in Isaac Lab starting from a minimal baseline and improve it via reward shaping and robustness strategies. Please read this README fully before starting and follow the exact workflow and naming rules below to ensure your runs integrate correctly with the cluster scripts and grading pipeline.
 
 ## Repository policy
@@ -170,6 +174,10 @@ Students should only edit README.md below this line.
 
 
 # ROB6323 Go2 Project - Code Modifications (Run_12 selected as 'best' run)
+
+----
+Note: **Logs for all runs available here:** [Google Drive folder](https://drive.google.com/drive/folders/1iKTXRSzleZ_O_0G2LWdkNHcRCAVvaGXI?usp=sharing)
+----
 
 This document summarizes the **functional changes** we implemented on top of the starter repository to improve locomotion learning and prepare for domain randomization. It focuses on **new reward/penalty terms and environment functionality**, not on per-run hyperparameter sweeps.
 
