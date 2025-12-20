@@ -923,16 +923,38 @@ yaw_rate_reward_scale = 1.5  # was 8.0 from Run_10
 - Performance regressed vs Run_04 (lin_vel 2.701, mean reward -11.28)
 - Friction randomization likely too aggressive for current reward balance; retuning needed before adding more randomization
 
-**Revised Run_11 Plan (Next):**
-- Run_11b: Friction DR (stage 1) - Train from scratch; start with a narrow friction range (e.g., 0.8-1.2) and reduce commanded linear velocity ranges to about +/-0.6 m/s.
+---
+
+### Run_11b: Domain Randomization - Stage 1 (Job ID: 135552)
+**Date:** 2025-12-19  
+**Status:** Completed  
+**Duration:** 500 iterations  
+**Objective:** Fix Run_11a regression by staging DR difficulty (narrow friction + reduced command ranges), while keeping Run_04 reward/penalty structure.
+
+**Key Changes (vs. Run_04):**
+- **Narrow friction DR at reset:** static/dynamic friction in ~[0.8, 1.2] (instead of [0.5, 1.25]) with low restitution.
+- **Reduced command difficulty under DR:** sample commanded linear velocities from about +/-0.6 m/s (instead of +/-1.0 m/s).
+
+**Results (end of training):**
+- **track_lin_vel_xy_exp:** 2.14
+- **lin_vel_error:** 0.28
+- **Mean Reward:** -30.96
+
+**Comparison:**
+- vs **Run_11a**: large recovery (track_lin_vel_xy_exp 0.78 → 2.14).
+- vs **Run_04**: still worse (2.14 vs 2.70) and mean reward more negative (-30.96 vs -11.28).
+- vs **Run_10**: far below (15.56), expected due to different reward scaling and DR difficulty (not a direct comparison).
+
+**Run_11 Plan (Next):**
 - Run_11c: Friction + mass DR (stage 2) - Train from scratch; widen friction to (0.5-1.25) and add base-mass randomization (e.g., -1 to +3 kg), while keeping reduced command ranges.
 - Optional follow-up: Only after Run_11c works, consider actuator gain randomization and/or random pushes.
 
 **Run Status:**
-- Run_11b Job ID: 135552 (running)
+- Run_11b Job ID: 135552 (completed)
+- Run_11c Job ID: 135580 (running)
 
 **Validation Checklist:**
 - [x] Training completes without errors
 - [ ] Mean reward comparable to Run_04 (-11.28 +/- 20%)
 - [ ] Locomotion quality maintained
-- [ ] TensorBoard shows friction randomization applied (check event logs)
+- [x] TensorBoard shows friction randomization applied (check event logs)
