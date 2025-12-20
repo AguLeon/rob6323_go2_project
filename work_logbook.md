@@ -965,6 +965,8 @@ yaw_rate_reward_scale = 1.5  # was 8.0 from Run_10
 **Base:** Run_11c (Stage 2 DR: wider surface friction + base mass)  
 **Objective:** Add joint friction modeling (stiction + viscous) while also scaling collision penalties under high tracking rewards.
 
+**Status:** Running (Job ID: 135624)
+
 **Planned Changes:**
 - **Tracking rewards (from Run_10):** `lin_vel_reward_scale=16.0`, `yaw_rate_reward_scale=8.0`
 - **Collision penalty (same as Run_10):** `base_collision_penalty_scale=-1.0`
