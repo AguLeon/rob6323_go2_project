@@ -68,29 +68,22 @@ The instructor mentioned good performance should reach `track_lin_vel_xy_exp` ar
 
 However, watching the training revealed robot-to-robot collisions (4096 environments spaced 4.0m apart). The collision metric (`base_contact`) showed 0.000 despite visible collisions. Looking at the code: the metric only tracks forces on the robot's torso: `base_contact_force_magnitude = torch.norm(net_contact_forces[:, :, self._base_id])`. Leg-to-robot or foot-to-robot collisions between neighboring environments aren't captured. So the metric measures torso-ground contact for termination, not robot-robot interference during training.
 
-## Domain Randomization: Runs 11a-11c
+## Domain Randomization: Runs 11a-11b
 
 Run_10 performed well in simulation, but the real robot will face different surfaces (carpet vs. concrete), payload changes, actuator wear, and bumps. Domain randomization trains on varied physics parameters to handle this.
 
 **Run_11a** tried aggressive randomization from scratch with wide friction ranges (0.5-1.25) and standard command ranges (±1.0 m/s). This failed: mean reward -61.10, track_lin_vel_xy_exp 0.78 (97% worse than Run_04's 2.70). Too hard to learn from scratch.
 
-**Run_11b - Stage 1 DR (Job ID: 135552)** used a staged approach:
+**Run_11b (Job ID: 135552)** used a more conservative approach:
 - Narrower friction: [0.8, 1.2] for static/dynamic friction, [0.0, 0.05] for restitution
 - Reduced command ranges: ±0.6 m/s instead of ±1.0 m/s to make learning easier
 - 100 buckets for material properties
 
 This worked much better: track_lin_vel_xy_exp recovered to 2.14 (175% improvement over Run_11a), though still 21% below Run_04's 2.70. Mean reward was more negative (-30.96 vs. -11.28), probably from foot slip penalties and harder dynamics. But training was stable with no crashes.
 
-**Run_11c - Stage 2 DR (Job ID: 135580, completed)** expanded randomization:
-- Wider friction: [0.5, 1.25] for static/dynamic friction
-- Base mass randomization: ±1-3 kg payload variation
-- Kept reduced command ranges from Stage 1
-
-The two-stage approach (narrow→wide) helps the policy adapt gradually instead of failing immediately.
-
 ## Joint Friction Model: Run_12
 
-**Run_12** (Job ID: 135624, running) adds a joint friction model on top of Run_11c. Real actuators have stiction and viscous damping that the basic PD controller doesn't account for.
+**Run_12** (Job ID: 135667, running) adds a joint friction model on top of Run_11b's domain randomization. Real actuators have stiction and viscous damping that the basic PD controller doesn't account for.
 
 **Joint Friction Model:**
 The torque applied to each joint subtracts friction from PD control:
@@ -107,13 +100,13 @@ Friction coefficients are sampled randomly per environment at reset:
 
 One coefficient per environment applies to all 12 joints, giving different friction across the 4096 parallel environments.
 
-**Changes from Run_11c:**
+**Changes from Run_11b:**
 - Tracking rewards increased to Run_10 levels: lin_vel=16.0, yaw=8.0
 - Joint friction enabled with randomization
-- Keeps Run_11c's Stage 2 DR (wide friction + mass randomization)
+- Keeps Run_11b's DR (narrow friction + reduced command ranges)
 - Collision penalty stays at -1.0
 
-This combines randomization of external dynamics (surface friction, mass) with actuator randomization (joint friction) for better sim-to-real transfer.
+This combines randomization of external dynamics (surface friction) with actuator randomization (joint friction) for better sim-to-real transfer.
 
 ## Summary of Key Results
 
@@ -129,10 +122,9 @@ This combines randomization of external dynamics (surface friction, mass) with a
 | 08 | Run_04 | Tracking rewards (+33%) | `lin_vel_reward_scale`: 3.0→**4.0**<br>`yaw_rate_reward_scale`: 1.5→**2.0** | 1.99 | 135358 |
 | 09 | Run_04 | Action rate penalty (-50%) | `action_rate_reward_scale`: -0.1→**-0.05** | 2.69 | 135367 |
 | 10 | Run_04 | Tracking rewards (+433%) | `lin_vel_reward_scale`: 3.0→**16.0**<br>`yaw_rate_reward_scale`: 1.5→**8.0** | 15.56 | 135378 |
-| 11a | Run_04 | Domain randomization | Wide friction ranges: (0.5-1.25)<br>Standard command ranges ±1.0 m/s | 0.78 | 135457 |
-| 11b | Run_04 | Friction DR (stage 1) | Narrow friction: (0.8-1.2)<br>Reduced commands: ±0.6 m/s | 2.14 | 135552 |
-| 11c | Run_04 | Friction + mass DR (stage 2) | Wide friction: (0.5-1.25)<br>Mass randomization ±1-3 kg<br>Reduced commands: ±0.6 m/s | TBD | 135580 |
-| 12 | Run_11c | DR + joint friction | Tracking rewards: 16.0/8.0<br>Joint friction: stiction (0.0-2.5), viscous (0.0-0.3)<br>Maintains Run_11c DR | Running | 135624 |
+| 11a | Run_04 | Domain randomization (failed) | Wide friction ranges: (0.5-1.25)<br>Standard command ranges ±1.0 m/s | 0.78 | 135457 |
+| 11b | Run_04 | Friction DR | Narrow friction: (0.8-1.2)<br>Reduced commands: ±0.6 m/s | 2.14 | 135552 |
+| 12 | Run_11b | DR + joint friction + high rewards | Tracking rewards: 16.0/8.0<br>Joint friction: stiction (0.0-2.5), viscous (0.0-0.3)<br>Maintains Run_11b DR | Running | 135667 |
 
 ## Conclusions
 
@@ -140,8 +132,8 @@ We made progress through three phases:
 
 **Phase 1 - Reward Tuning (Runs 01-10):** Increasing tracking rewards from 1.0 to 16.0 for linear velocity improved performance from 0.98 to 15.56 m/s without crashes. Key lessons: (1) tracking rewards scale well when penalties are balanced correctly, (2) contact force shaping penalty at 0.4 is critical for proper gait and can't be reduced without breaking walking, (3) reward scaling isn't always linear - Run_08 performed worse at 4.0/2.0 than Run_04 at 3.0/1.5.
 
-**Phase 2 - Domain Randomization (Runs 11a-11c):** We learned that aggressive randomization from scratch doesn't work (Run_11a failed at 0.78 m/s). A staged approach worked better: Run_11b used narrower friction ranges plus reduced command ranges to get 2.14 m/s. Run_11c then expanded to wider friction and added mass randomization. The gradual approach prevents training from collapsing.
+**Phase 2 - Domain Randomization (Runs 11a-11b):** We learned that aggressive randomization from scratch doesn't work (Run_11a failed at 0.78 m/s). Run_11b used narrower friction ranges (0.8-1.2) plus reduced command ranges (±0.6 m/s) to get 2.14 m/s with stable training.
 
-**Phase 3 - Joint Friction (Run_12):** Added stiction and viscous damping to model real actuator friction on top of Run_11c's randomization. Combined with Run_10's higher tracking rewards (16.0/8.0) to see if we can get both high performance and robustness.
+**Phase 3 - Joint Friction (Run_12):** Added stiction and viscous damping to model real actuator friction on top of Run_11b's randomization. Combined with Run_10's higher tracking rewards (16.0/8.0) to see if we can get both high performance and robustness.
 
-The progression from optimizing rewards (Run_10) to staged randomization (Run_11b→11c) to actuator modeling (Run_12) should help with transferring to the real robot, though we won't know until we actually test it.
+The progression from optimizing rewards (Run_10) to domain randomization (Run_11b) to actuator modeling (Run_12) should help with transferring to the real robot, though we won't know until we actually test it.

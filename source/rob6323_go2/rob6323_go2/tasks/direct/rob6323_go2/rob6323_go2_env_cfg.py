@@ -194,8 +194,8 @@ class Rob6323Go2EnvCfgRun11c(Rob6323Go2EnvCfg):
 
 
 @configclass
-class Rob6323Go2EnvCfgRun12(Rob6323Go2EnvCfgRun11c):
-    """Run_12: Keep Run_11c DR + add joint friction + scale collision penalty (6x) with Run_10 tracking rewards."""
+class Rob6323Go2EnvCfgRun12(Rob6323Go2EnvCfg):
+    """Run_12: Run_11b DR (Stage 1) + add joint friction + high tracking rewards."""
 
     # reward scales (use Run_10 tracking rewards)
     lin_vel_reward_scale = 16.0
@@ -210,3 +210,6 @@ class Rob6323Go2EnvCfgRun12(Rob6323Go2EnvCfgRun11c):
     stiction_range = (0.0, 2.5)
     viscous_range = (0.0, 0.3)
     stiction_velocity_scale = 0.1
+
+    # Use Stage 1 DR (same as Run_11b - narrow friction ranges)
+    events: Rob6323Go2EventCfgStage1 | Rob6323Go2EventCfgStage2 | None = Rob6323Go2EventCfgStage1()
